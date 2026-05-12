@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base palette – dark tactical theme -->
+    <color name="background">#0D0D0D</color>
+    <color name="surface">#1A1A1A</color>
+    <color name="primary">#1B3A2D</color>
+    <color name="primary_variant">#0F2419</color>
+    <color name="accent">#4CAF50</color>
+    <color name="accent_variant">#81C784</color>
+
+    <color name="text_primary">#EFEFEF</color>
+    <color name="text_secondary">#9E9E9E</color>
+    <color name="divider">#2A2A2A</color>
+
+    <color name="nav_background">#111111</color>
+    <!-- nav_icon_tint and nav_text_tint are defined as color state lists in res/color/ -->
+
+    <color name="message_panel_bg">#CC111111</color>
+
+    <!-- Status -->
+    <color name="color_green">#4CAF50</color>
+    <color name="color_yellow">#FFEB3B</color>
+    <color name="color_orange">#FF9800</color>
+    <color name="color_gray">#9E9E9E</color>
+    <color name="color_blue">#2196F3</color>
+</resources>
