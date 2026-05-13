@@ -66,8 +66,10 @@ dependencies {
     // USB Serial
     implementation 'com.github.mik3y:usb-serial-for-android:3.7.3'
 
-    // BLE
+    // BLE - Nordic BleManager with Kotlin extensions
     implementation 'no.nordicsemi.android:ble:2.7.2'
+    implementation 'no.nordicsemi.android:ble-ktx:2.7.2'
+    implementation 'no.nordicsemi.android:ble-common:2.7.2'
 
     // Image loading
     implementation 'com.github.bumptech.glide:glide:4.16.0'

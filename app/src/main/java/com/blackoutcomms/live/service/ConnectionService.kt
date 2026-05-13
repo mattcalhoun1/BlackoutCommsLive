@@ -78,7 +78,7 @@ class ConnectionService : Service() {
             startTestMode()
         } else {
             // Auto-start USB connection attempts immediately on launch
-            connectUsb()
+            //connectUsb()
         }
     }
 
@@ -255,7 +255,6 @@ class ConnectionService : Service() {
 
     fun connectBle(deviceAddress: String) {
         Log.i(TAG, "BLE connect requested for $deviceAddress")
-        // Full implementation: use BleFeedManager from the activity/service
     }
 
     // ── Disconnect ────────────────────────────────────────────────────────────

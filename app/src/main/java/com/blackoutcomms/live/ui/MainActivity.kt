@@ -148,16 +148,34 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     override fun onConnectBle() {
+        // Location permission is required for BLE scanning on Android 6+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "Location permission required for BLE scanning", Toast.LENGTH_LONG).show()
+            ActivityCompat.requestPermissions(this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_PERMISSIONS)
+            return
+        }
+
         connectionService?.cancelUsbConnection()
+        bleFeedManager?.closeBle()
         bleFeedManager = BleFeedManager(this).also { mgr ->
-            mgr.startScan { device ->
-                runOnUiThread {
-                    Toast.makeText(this, "Found: ${device.name}, connecting…", Toast.LENGTH_SHORT).show()
+            // Show toast feedback as BLE state changes
+            mgr.bleState.observe(this) { state ->
+                val msg = when (state) {
+                    BleFeedManager.BleState.SCANNING      -> "Scanning for BLE devices…"
+                    BleFeedManager.BleState.CONNECTING    -> "BLE device found, connecting…"
+                    BleFeedManager.BleState.CONNECTED     -> "BLE connected"
+                    BleFeedManager.BleState.DISCONNECTED  -> "BLE disconnected"
+                    BleFeedManager.BleState.NOT_SUPPORTED -> "Device does not support required BLE service"
+                    else -> null
                 }
-                mgr.connect(device)
+                msg?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+            }
+            mgr.startScan(this) { device ->
+                runOnUiThread { mgr.connectBle(device) }
             }
         }
-        Toast.makeText(this, "Scanning for BLE devices…", Toast.LENGTH_SHORT).show()
     }
 
     override fun onConnectTest() {
@@ -191,7 +209,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     override fun onDestroy() {
-        bleFeedManager?.disconnect()
+        bleFeedManager?.closeBle()
         unbindService(serviceConnection)
         super.onDestroy()
     }
