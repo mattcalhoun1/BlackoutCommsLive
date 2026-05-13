@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.PorterDuff
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -27,13 +29,18 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private var connectionService: ConnectionService? = null
-    private var bleFeedManager: BleFeedManager? = null
 
-    // Track whether we've already shown the startup connecting dialog this session
+    // Kept only for manual BLE invocations from ConnectionDialog;
+    // startup BLE is owned by ConnectionService
+    private var manualBleFeedManager: BleFeedManager? = null
+
     private var startupDialogShown = false
+    private var connectMenuItem: MenuItem? = null
 
     companion object {
         private const val REQUEST_PERMISSIONS = 100
+        private val COLOR_BLE_CONNECTED  = Color.parseColor("#2196F3")  // blue
+        private val COLOR_BLE_DEFAULT    = Color.WHITE
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -41,14 +48,18 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             val binder = service as? ConnectionService.LocalBinder
             connectionService = binder?.getService()
 
-            // Show the connecting spinner on startup if we're in live mode
-            // and the service is currently attempting to connect
+            // Show USB connecting dialog on startup (non-test mode)
             if (!ConnectionService.TEST_MODE && !startupDialogShown) {
                 startupDialogShown = true
                 val svc = connectionService ?: return
                 if (svc.usbState.value == ConnectionService.UsbState.CONNECTING) {
                     showConnectingDialog(svc)
                 }
+            }
+
+            // Observe BLE state from the service to tint the toolbar icon
+            connectionService?.getCurrBleState()?.observe(this@MainActivity) { state ->
+                updateConnectIcon(state)
             }
         }
 
@@ -63,7 +74,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         setContentView(binding.root)
 
         setSupportActionBar(binding.toolbar)
-        supportActionBar?.title = "Blackout Comms Live"
+        supportActionBar?.setDisplayShowTitleEnabled(false)  // title shown via custom view
 
         requestRequiredPermissions()
 
@@ -99,36 +110,37 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         }
     }
 
-    private fun showConnectingDialog(service: ConnectionService) {
-        // Don't stack dialogs if one is already showing (e.g. on config change)
-        val existing = supportFragmentManager.findFragmentByTag(UsbConnectingDialog.TAG)
-        if (existing != null) return
-
-        val dialog = UsbConnectingDialog()
-        dialog.show(supportFragmentManager, UsbConnectingDialog.TAG)
-
-        // Pass the service reference once the fragment is attached
-        supportFragmentManager.executePendingTransactions()
-        (supportFragmentManager.findFragmentByTag(UsbConnectingDialog.TAG) as? UsbConnectingDialog)
-            ?.observeService(service, this)
-    }
-
-    /** Called by UsbConnectingDialog's Cancel button */
-    fun cancelUsbConnect() {
-        connectionService?.cancelUsbConnection()
-    }
-
-    // ── Toolbar ───────────────────────────────────────────────────────────────
+    // ── Toolbar icon tinting ──────────────────────────────────────────────────
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.toolbar_menu, menu)
+        connectMenuItem = menu.findItem(R.id.action_connect)
+        // Apply current BLE state immediately in case it fired before menu was created
+        val currentState = connectionService?.getCurrBleState()?.value ?: BleFeedManager.BleState.IDLE
+        updateConnectIcon(currentState)
         return true
+    }
+
+    private fun updateConnectIcon(state: BleFeedManager.BleState) {
+        val icon = connectMenuItem?.icon
+        if (icon == null) {
+            // Menu not inflated yet — invalidate so onCreateOptionsMenu re-runs,
+            // which will call updateConnectIcon() again with the current state.
+            invalidateOptionsMenu()
+            return
+        }
+        if (state == BleFeedManager.BleState.CONNECTED) {
+            icon.setColorFilter(COLOR_BLE_CONNECTED, PorterDuff.Mode.SRC_IN)
+        } else {
+            icon.clearColorFilter()
+            icon.setColorFilter(COLOR_BLE_DEFAULT, PorterDuff.Mode.SRC_IN)
+        }
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_connect -> {
-                ConnectionDialog().show(supportFragmentManager, "connect_dialog")
+                onConnectBle()
                 true
             }
             R.id.action_clear -> {
@@ -140,6 +152,23 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         }
     }
 
+    // ── USB connecting dialog ─────────────────────────────────────────────────
+
+    private fun showConnectingDialog(service: ConnectionService) {
+        val existing = supportFragmentManager.findFragmentByTag(UsbConnectingDialog.TAG)
+        if (existing != null) return
+
+        val dialog = UsbConnectingDialog()
+        dialog.show(supportFragmentManager, UsbConnectingDialog.TAG)
+        supportFragmentManager.executePendingTransactions()
+        (supportFragmentManager.findFragmentByTag(UsbConnectingDialog.TAG) as? UsbConnectingDialog)
+            ?.observeService(service, this)
+    }
+
+    fun cancelUsbConnect() {
+        connectionService?.cancelUsbConnection()
+    }
+
     // ── ConnectionDialog.Listener ─────────────────────────────────────────────
 
     override fun onConnectUsb() {
@@ -148,7 +177,6 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     override fun onConnectBle() {
-        // Location permission is required for BLE scanning on Android 6+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Location permission required for BLE scanning", Toast.LENGTH_LONG).show()
@@ -156,26 +184,9 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_PERMISSIONS)
             return
         }
-
         connectionService?.cancelUsbConnection()
-        bleFeedManager?.closeBle()
-        bleFeedManager = BleFeedManager(this).also { mgr ->
-            // Show toast feedback as BLE state changes
-            mgr.bleState.observe(this) { state ->
-                val msg = when (state) {
-                    BleFeedManager.BleState.SCANNING      -> "Scanning for BLE devices…"
-                    BleFeedManager.BleState.CONNECTING    -> "BLE device found, connecting…"
-                    BleFeedManager.BleState.CONNECTED     -> "BLE connected"
-                    BleFeedManager.BleState.DISCONNECTED  -> "BLE disconnected"
-                    BleFeedManager.BleState.NOT_SUPPORTED -> "Device does not support required BLE service"
-                    else -> null
-                }
-                msg?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
-            }
-            mgr.startScan(this) { device ->
-                runOnUiThread { mgr.connectBle(device) }
-            }
-        }
+        // Delegate BLE to the service so it survives backgrounding
+        connectionService?.startBle()
     }
 
     override fun onConnectTest() {
@@ -209,7 +220,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     override fun onDestroy() {
-        bleFeedManager?.closeBle()
+        manualBleFeedManager?.close()
         unbindService(serviceConnection)
         super.onDestroy()
     }

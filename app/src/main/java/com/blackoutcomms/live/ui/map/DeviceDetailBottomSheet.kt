@@ -2,11 +2,13 @@ package com.blackoutcomms.live.ui.map
 
 import android.os.Bundle
 import android.view.*
+import android.view.View
 import androidx.core.view.isVisible
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.databinding.BottomSheetDeviceDetailBinding
 import com.blackoutcomms.live.util.IconResolver
+import com.blackoutcomms.live.util.TimestampUtil
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
 class DeviceDetailBottomSheet : BottomSheetDialogFragment() {
@@ -32,39 +34,31 @@ class DeviceDetailBottomSheet : BottomSheetDialogFragment() {
         val state = ClusterRepository.getDeviceById(deviceId) ?: return
 
         binding.apply {
-            tvNickname.text    = state.device.nickname ?: state.device.name
-            tvName.text        = "Name: ${state.device.name}"
-            tvLat.text         = "Lat: ${state.lat ?: "—"}"
-            tvLon.text         = "Lon: ${state.lon ?: "—"}"
-            tvSpeed.text       = "Speed: ${state.speed?.let { "%.1f m/s".format(it) } ?: "—"}"
-            tvHeading.text     = "Heading: ${state.head?.let { "%.0f°".format(it) } ?: "—"}"
-            tvTimestamp.text   = "Last seen: ${state.locationTs ?: "—"}"
+            tvNickname.text  = state.device.nickname ?: state.device.name
+            tvName.text      = state.device.name
+
+            // Monospace data values
+            tvLat.text       = state.lat?.let { "%.6f".format(it) } ?: "—"
+            tvLon.text       = state.lon?.let { "%.6f".format(it) } ?: "—"
+            tvSpeed.text     = state.speed?.let { "%.1f m/s".format(it) } ?: "—"
+            tvHeading.text   = state.head?.let { "%.0f°".format(it) } ?: "—"
+            tvTimestamp.text = TimestampUtil.formatTs(state.locationTs)
+
+            // Temperature — stored Celsius, shown as Fahrenheit
+            val tempStr = IconResolver.formatTempF(state.temperature)
+            tvTemperature.text      = tempStr ?: "—"
+            //tvTemperature.isVisible = if (tempStr != null) View.VISIBLE else View.GONE
+            tvTemperature.isVisible = if (tempStr != null) true else false
 
             // Battery
             val batteryRes = IconResolver.batteryIcon(state.battery)
-            if (batteryRes != null) {
-                imgBattery.setImageResource(batteryRes)
-                imgBattery.isVisible = true
-            } else {
-                imgBattery.isVisible = false
-            }
+            imgBattery.isVisible = batteryRes != null
+            batteryRes?.let { imgBattery.setImageResource(it) }
 
             // Relay state
             val relayRes = IconResolver.relayIcon(state.relayState)
-            if (relayRes != null) {
-                imgRelay.setImageResource(relayRes)
-                imgRelay.isVisible = true
-            } else {
-                imgRelay.isVisible = false
-            }
-
-            // Temperature
-            if (state.temperature != null) {
-                tvTemperature.text = "Temp: %.1f°F".format(state.temperature)
-                tvTemperature.isVisible = true
-            } else {
-                tvTemperature.isVisible = false
-            }
+            imgRelay.isVisible = relayRes != null
+            relayRes?.let { imgRelay.setImageResource(it) }
         }
     }
 

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/app_bar"
@@ -16,25 +17,58 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/primary"
+            app:contentInsetStart="0dp"
+            app:contentInsetStartWithNavigation="0dp"
             app:titleTextColor="@color/text_primary"
-            app:subtitleTextColor="@color/text_secondary" />
+            app:subtitleTextColor="@color/text_secondary">
+
+            <!-- Custom title area: logo + app name -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="12dp">
+
+                <ImageView
+                    android:id="@+id/toolbar_logo"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="10dp"
+                    android:contentDescription="Blackout Comms logo"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/blackout_comms_logo" />
+
+                <TextView
+                    android:id="@+id/toolbar_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Blackout Comms Live"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+
+            </LinearLayout>
+
+        </androidx.appcompat.widget.Toolbar>
 
     </com.google.android.material.appbar.AppBarLayout>
 
+    <!-- Fragment container takes all remaining space between toolbar and bottom nav -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
         android:background="@color/nav_background"
         app:itemIconTint="@color/nav_icon_tint"
         app:itemTextColor="@color/nav_text_tint"
         app:menu="@menu/bottom_nav_menu" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

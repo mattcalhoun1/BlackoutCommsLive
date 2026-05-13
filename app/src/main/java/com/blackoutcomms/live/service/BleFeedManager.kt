@@ -146,22 +146,21 @@ class BleFeedManager(context: Context) : BleManager(context) {
      */
     private fun onDataReceived(data: Data) {
         Log.w("ble", "BLE data received ${data.size()} ${data.getStringValue(0)}")
-        val chunk = data.getStringValue(0) ?: return
-        var endLargeMessage = false;
-        var soloMessage = false;
-
+        /*var soloMessage = false;
         // is this a large message header or ending?
-        if (chunk.indexOf("largeBegin") != -1) {
+        val thisStr = data.getStringValue(0)
+        if (thisStr!!.indexOf("largeBegin") >= 0) {
             Log.i("ble", "Large message incoming")
             largeMessageIncoming = true;
         }
-        else if (chunk.indexOf("largeEnd") != -1) {
+        else if (thisStr.indexOf("largeEnd") != -1) {
             Log.i("ble", "end large message")
             largeMessageIncoming = false;
         }
         else {
             soloMessage = true;
         }
+        val chunk = data.getStringValue(0) ?: return
 
         // if this is part of a large message, append it and continue waiting
         if (largeMessageIncoming) {
@@ -177,17 +176,20 @@ class BleFeedManager(context: Context) : BleManager(context) {
                 Log.w("ble", "BLE Data: ${lineBuffer.toString()}")
                 ClusterRepository.ingest(lineBuffer.toString())
                 lineBuffer.clear();
-            }
-            /*
-            var idx: Int
-            while (lineBuffer.indexOf('\n').also { idx = it } != -1) {
-                val line = lineBuffer.substring(0, idx).trim()
-                lineBuffer.delete(0, idx + 1)
-                if (line.isNotEmpty()) {
-                    Log.w("ble", "BLE Data: ${lineBuffer.toString()}")
-                    ClusterRepository.ingest(lineBuffer.toString())
-                }
             }*/
+        val chunk = data.getStringValue(0) ?: return
+        lineBuffer.append(chunk)
+        // keep accepting messages until carriage return is received
+        var idx: Int
+
+        // did we find the end of the larger message
+        if (lineBuffer.indexOf('\n') != -1) {
+            Log.w("ble", "Full String: ${lineBuffer.toString()}")
+            ClusterRepository.ingest(lineBuffer.toString())
+            lineBuffer.clear();
+        }
+        else {
+            //Log.w("ble", "Partial: ${lineBuffer.toString()}")
         }
     }
 

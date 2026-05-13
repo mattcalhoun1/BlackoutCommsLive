@@ -34,6 +34,9 @@ object ClusterRepository {
     private val _graphData = MutableLiveData<GraphPayload?>()
     val graphData: LiveData<GraphPayload?> = _graphData
 
+    // Internal mutable graph map — upserted incrementally as partial messages arrive
+    private val graphMap = mutableMapOf<String, MutableMap<String, GraphRelationship>>()
+
     private val _messages = MutableLiveData<List<Message>>(emptyList())
     val messages: LiveData<List<Message>> = _messages
 
@@ -140,15 +143,18 @@ object ClusterRepository {
     }
 
     private fun processNeighbors(json: JsonObject) {
+        Log.w("json", "Processing neighbors")
         val payload = gson.fromJson(json, NeighborsPayload::class.java)
         val nbrs = payload.neighbors
 
         // Reset neighbor types
-        deviceMap.forEach { (id, state) ->
-            deviceMap[id] = state.copy(neighborType = NeighborType.NONE)
-        }
+        //deviceMap.forEach { (id, state) ->
+        //    deviceMap[id] = state.copy(neighborType = NeighborType.NONE)
+        //}
+
 
         nbrs.direct.forEach { entry ->
+            Log.w("json", "Direct: Battery ${entry.battery}, temp: ${entry.battery}")
             deviceMap[entry.id]?.let { state ->
                 val updated = state.copy(
                     neighborType = NeighborType.DIRECT,
@@ -162,7 +168,8 @@ object ClusterRepository {
         }
         nbrs.indirect.forEach { entry ->
             val current = deviceMap[entry.id]
-            if (current != null && current.neighborType == NeighborType.NONE) {
+            Log.w("json", "Indirect: Battery ${entry.battery}, temp: ${entry.battery}")
+            if (current != null && (current.neighborType == NeighborType.NONE || current.neighborType == NeighborType.INDIRECT)) {
                 val updated = current.copy(
                     neighborType = NeighborType.INDIRECT,
                     battery = entry.battery ?: current.battery,
@@ -200,7 +207,16 @@ object ClusterRepository {
 
     private fun processGraph(json: JsonObject) {
         val payload = gson.fromJson(json, GraphPayload::class.java)
-        _graphData.postValue(payload)
+        // Upsert: merge incoming entries into the accumulated graph map.
+        // This handles partial graph messages that carry only a subset of nodes.
+        payload.graph.forEach { (fromAddr, relations) ->
+            val existing = graphMap.getOrPut(fromAddr) { mutableMapOf() }
+            relations.forEach { (toAddr, rel) ->
+                existing[toAddr] = rel
+            }
+        }
+        // Publish a new GraphPayload snapshot from the merged map
+        _graphData.postValue(GraphPayload(graphMap.toMap().mapValues { it.value.toMap() }))
     }
 
     private fun processMessage(json: JsonObject) {
@@ -233,6 +249,7 @@ object ClusterRepository {
 
     fun reset() {
         deviceMap.clear()
+        graphMap.clear()
         _selfDevice.postValue(null)
         _deviceStates.postValue(emptyMap())
         _neighbors.postValue(null)

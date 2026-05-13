@@ -76,13 +76,22 @@ object IconResolver {
         }
     }
 
+    // ── Temperature conversion ───────────────────────────────────────────────
+
+    /** Convert Celsius to Fahrenheit for display. Stored values are always Celsius. */
+    fun celsiusToFahrenheit(celsius: Double): Double = celsius * 9.0 / 5.0 + 32.0
+
+    /** Format a Celsius value as a Fahrenheit display string, e.g. "73.4°F" */
+    fun formatTempF(celsius: Double?): String? =
+        celsius?.let { "%.1f°F".format(celsiusToFahrenheit(it)) }
+
     /** Color int for a graph link strength value */
     fun graphLineColor(strength: Int): Int? = when {
-        strength in 80..100 -> 0xCC4CAF50.toInt()   // green, semi-transparent
-        strength in 50..79  -> 0xCC2196F3.toInt()   // blue
-        strength in 30..49  -> 0xCCFFEB3B.toInt()   // yellow
-        strength in 6..29   -> 0xCCFF9800.toInt()   // orange
-        //strength == 5       -> 0xCC9E9E9E.toInt()   // gray
+        strength in 80..100 -> 0xCC5C8A4A.toInt()   // muted green, semi-transparent
+        strength in 50..79  -> 0xCC3A6A8A.toInt()   // muted blue
+        strength in 30..49  -> 0xCCB8A030.toInt()   // muted amber/yellow
+        strength in 6..29   -> 0xCCB06030.toInt()   // muted orange
+        //strength == 5       -> 0xCC4A5240.toInt()   // dark grey-green
         else                -> null                  // no line
     }
 }

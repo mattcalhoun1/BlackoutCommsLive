@@ -13,62 +13,99 @@
         android:layout_height="4dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginBottom="16dp"
-        android:background="@color/divider"
-        android:backgroundTint="@color/text_secondary" />
+        android:background="@color/accent" />
 
+    <!-- Nickname — bold, khaki -->
     <TextView
         android:id="@+id/tv_nickname"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="20sp"
         android:textStyle="bold"
+        android:letterSpacing="0.08"
+        android:textAllCaps="false"
         android:textColor="@color/text_primary"
-        android:layout_marginBottom="4dp" />
+        android:layout_marginBottom="2dp" />
 
+    <!-- Name — dim label -->
     <TextView
         android:id="@+id/tv_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="11sp"
+        android:letterSpacing="0.1"
         android:textColor="@color/text_secondary"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="14dp" />
 
-    <TextView
-        android:id="@+id/tv_lat"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp" />
+    <!-- Data fields: dim label + monospace value side by side -->
 
-    <TextView
-        android:id="@+id/tv_lon"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginBottom="3dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="LAT" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_lat" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:textColor="@color/text_data" />
+    </LinearLayout>
 
-    <TextView
-        android:id="@+id/tv_speed"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginBottom="3dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="LON" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_lon" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:textColor="@color/text_data" />
+    </LinearLayout>
 
-    <TextView
-        android:id="@+id/tv_heading"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginBottom="3dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="SPEED" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_speed" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:textColor="@color/text_data" />
+    </LinearLayout>
 
-    <TextView
-        android:id="@+id/tv_timestamp"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_secondary"
-        android:textSize="12sp"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginBottom="3dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="HEADING" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_heading" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:textColor="@color/text_data" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginBottom="3dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="TEMP" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_temperature" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="13sp" android:fontFamily="monospace"
+            android:textColor="@color/text_data"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginTop="4dp"
+        android:layout_marginBottom="12dp">
+        <TextView android:layout_width="80dp" android:layout_height="wrap_content"
+            android:text="LAST SEEN" android:textSize="10sp" android:letterSpacing="0.12"
+            android:textColor="@color/text_secondary" android:gravity="center_vertical"/>
+        <TextView android:id="@+id/tv_timestamp" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:textSize="12sp" android:fontFamily="monospace"
+            android:textColor="@color/text_secondary" />
+    </LinearLayout>
 
     <!-- Icons row -->
     <LinearLayout
@@ -95,14 +132,6 @@
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tv_temperature"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/text_primary"
-        android:textSize="13sp"
-        android:visibility="gone" />
-
-    <Space android:layout_width="match_parent" android:layout_height="16dp" />
+    <Space android:layout_width="match_parent" android:layout_height="8dp" />
 
 </LinearLayout>

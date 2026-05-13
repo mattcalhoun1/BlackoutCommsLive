@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.model.Message
 import com.blackoutcomms.live.util.IconResolver
+import com.blackoutcomms.live.util.TimestampUtil
 
 class MessageAdapter(private val context: Context) :
     RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
@@ -43,7 +44,7 @@ class MessageAdapter(private val context: Context) :
         fun bind(msg: Message, selfId: String) {
             imgType.setImageResource(IconResolver.messageTypeIcon(msg, selfId))
             imgStatus.setImageResource(IconResolver.messageStatusIcon(msg))
-            tvTimestamp.text = msg.ts
+            tvTimestamp.text = TimestampUtil.formatTs(msg.ts)
             tvTitle.text     = msg.title
             tvBody.text      = msg.text
         }

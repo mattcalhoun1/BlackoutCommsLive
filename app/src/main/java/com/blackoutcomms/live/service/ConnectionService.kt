@@ -63,6 +63,7 @@ class ConnectionService : Service() {
     private var activeUsbPort: UsbSerialPort? = null
     private var usbJob: Job? = null
     private var testJob: Job? = null
+    private var bleFeedManager: BleFeedManager? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): ConnectionService = this@ConnectionService
@@ -77,8 +78,9 @@ class ConnectionService : Service() {
         if (TEST_MODE) {
             startTestMode()
         } else {
-            // Auto-start USB connection attempts immediately on launch
+            // Auto-start both USB and BLE connection attempts on launch
             //connectUsb()
+            startBle()
         }
     }
 
@@ -251,11 +253,51 @@ class ConnectionService : Service() {
         }
     }
 
-    // ── BLE (stub) ────────────────────────────────────────────────────────────
+    // ── BLE ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Stable, persistent BLE state LiveData owned by the service.
+     * Lives for the entire service lifetime so the activity always observes
+     * the same instance regardless of how many times startBle() is called.
+     * startBle() mirrors the BleFeedManager's own bleState into this via an
+     * observer, so the UI never needs to re-subscribe.
+     */
+    private val _bleState = MutableLiveData(BleFeedManager.BleState.IDLE)
+    val bleState: LiveData<BleFeedManager.BleState> = _bleState
+
+    fun startBle() {
+        bleFeedManager?.closeBle()
+        bleFeedManager = BleFeedManager(this).also { mgr ->
+            // Mirror the manager's state into our stable service-level LiveData.
+            // Must observe on the main thread since LiveData.observe() requires it.
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                mgr.bleState.observeForever { state ->
+                    _bleState.postValue(state)
+                }
+            }
+            mgr.startScan(this) { device ->
+                Log.i(TAG, "BLE device found: ${device.address}")
+                mgr.connectBle(device)
+            }
+        }
+    }
 
     fun connectBle(deviceAddress: String) {
-        Log.i(TAG, "BLE connect requested for $deviceAddress")
+        bleFeedManager?.close()
+        bleFeedManager = BleFeedManager(this).also { mgr ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                mgr.bleState.observeForever { state ->
+                    _bleState.postValue(state)
+                }
+            }
+            val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            val device  = adapter?.getRemoteDevice(deviceAddress) ?: return
+            mgr.connect(device)
+        }
     }
+
+    /** Single stable accessor — always returns the same LiveData instance. */
+    fun getCurrBleState(): LiveData<BleFeedManager.BleState> = bleState
 
     // ── Disconnect ────────────────────────────────────────────────────────────
 
@@ -268,6 +310,8 @@ class ConnectionService : Service() {
         usbJob = null
         testJob?.cancel()
         testJob = null
+        bleFeedManager?.close()
+        bleFeedManager = null
         _usbState.postValue(UsbState.IDLE)
     }
 

@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- OSMDroid Map -->
+    <!-- OSMDroid Map (fills entire frame, under everything) -->
     <org.osmdroid.views.MapView
         android:id="@+id/map_view"
         android:layout_width="match_parent"
@@ -13,21 +13,98 @@
         android:clickable="true"
         android:focusable="true" />
 
-    <!-- Mesh Graph toggle (top-right) -->
-    <CheckBox
-        android:id="@+id/checkbox_mesh_graph"
+    <!-- Top-right checkbox strip: Critical + Mesh Graph -->
+    <LinearLayout
+        android:id="@+id/top_controls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_margin="12dp"
-        android:text="Mesh Graph"
-        android:textColor="@android:color/white"
-        android:buttonTint="@color/accent"
-        android:background="@drawable/bg_semi_dark"
-        android:padding="6dp"
-        android:checked="false" />
+        android:orientation="vertical"
+        android:layout_margin="10dp">
 
-    <!-- Message panel (bottom, hidden by default) -->
+        <CheckBox
+            android:id="@+id/checkbox_critical"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Critical"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:buttonTint="@color/accent"
+            android:background="@drawable/bg_semi_dark"
+            android:paddingStart="6dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
+            android:checked="false"
+            android:layout_marginBottom="6dp" />
+
+        <CheckBox
+            android:id="@+id/checkbox_mesh_graph"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Mesh Graph"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:buttonTint="@color/accent"
+            android:background="@drawable/bg_semi_dark"
+            android:paddingStart="6dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
+            android:checked="false" />
+
+    </LinearLayout>
+
+    <!-- Bottom filter bar: Max Age + Devices (sits above message panel) -->
+    <LinearLayout
+        android:id="@+id/bottom_filter_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/message_panel_bg"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_max_age"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="Age: All Time"
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:strokeColor="@color/accent"
+            app:backgroundTint="@color/surface_filter_btn"
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_devices"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="Devices: All"
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:strokeColor="@color/accent"
+            app:backgroundTint="@color/surface_filter_btn" />
+
+    </LinearLayout>
+
+    <!-- Message panel (slides up over the filter bar when messages arrive) -->
     <LinearLayout
         android:id="@+id/message_panel"
         android:layout_width="match_parent"
@@ -37,7 +114,6 @@
         android:background="@color/message_panel_bg"
         android:visibility="gone">
 
-        <!-- Panel header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
