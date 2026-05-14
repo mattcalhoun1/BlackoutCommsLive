@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/surface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Welcome to Blackout Comms Live!"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:letterSpacing="0.02"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 50/50 row: description left, image right -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <!-- Description text — left half -->
+            <TextView
+                android:id="@+id/tv_welcome_description"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="[Description text to be filled in]"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary"
+                android:lineSpacingMultiplier="1.4"
+                android:layout_marginEnd="12dp" />
+
+            <!-- Welcome image — right half -->
+            <ImageView
+                android:id="@+id/img_welcome"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:src="@drawable/welcome_image"
+                android:scaleType="fitCenter"
+                android:adjustViewBounds="true"
+                android:contentDescription="Welcome image" />
+
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Don't show again checkbox -->
+        <CheckBox
+            android:id="@+id/checkbox_dont_show"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Don't show again"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:buttonTint="@color/accent"
+            android:layout_marginBottom="14dp"
+            android:checked="false" />
+
+        <!-- Buttons row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_learn_more"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Learn More"
+                android:textColor="@color/accent"
+                app:strokeColor="@color/accent"
+                android:layout_marginEnd="8dp"
+                xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_close"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Close"
+                app:backgroundTint="@color/accent"
+                xmlns:app="http://schemas.android.com/apk/res-auto" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

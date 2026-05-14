@@ -40,6 +40,20 @@ object ClusterRepository {
     private val _messages = MutableLiveData<List<Message>>(emptyList())
     val messages: LiveData<List<Message>> = _messages
 
+    // Pulses whenever a location payload arrives — used by the status line
+    // Holds the timestamp of the most recent location update
+    private val _locationUpdates = MutableLiveData<String?>()
+    val locationUpdates: LiveData<String?> = _locationUpdates
+
+    private val _trafficEntries = MutableLiveData<List<TrafficEntry>>(emptyList())
+    val trafficEntries: LiveData<List<TrafficEntry>> = _trafficEntries
+
+    private val _pingEntries = MutableLiveData<List<PingEntry>>(emptyList())
+    val pingEntries: LiveData<List<PingEntry>> = _pingEntries
+
+    private val MAX_TRAFFIC_MS = 20L * 60 * 1000   // 20 minutes
+    private val MAX_PINGS = 30
+
     // internal mutable map
     private val deviceMap = mutableMapOf<String, DeviceState>()
 
@@ -59,6 +73,7 @@ object ClusterRepository {
                 json.has("graph")     -> processGraph(json)
                 json.has("sender")    -> processMessage(json)
                 json.has("message")   -> processMessage(json)
+                json.has("traffic")   -> processTraffic(json)
             }
         } catch (e: Exception) {
             // Malformed JSON — ignore
@@ -183,6 +198,21 @@ object ClusterRepository {
 
         _neighbors.postValue(nbrs)
         _deviceStates.postValue(deviceMap.toMap())
+
+        // Emit a PingEntry for every direct and indirect neighbor sighting
+        val nowMs = System.currentTimeMillis()
+        val newPings = mutableListOf<PingEntry>()
+        nbrs.direct.forEach { entry ->
+            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = true))
+        }
+        nbrs.indirect.forEach { entry ->
+            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = false))
+        }
+        if (newPings.isNotEmpty()) {
+            val current = _pingEntries.value?.toMutableList() ?: mutableListOf()
+            current.addAll(0, newPings)   // newest first
+            _pingEntries.postValue(current.take(MAX_PINGS))
+        }
     }
 
     private fun processLocation(json: JsonObject) {
@@ -203,6 +233,8 @@ object ClusterRepository {
             }
         }
         _deviceStates.postValue(deviceMap.toMap())
+        // Pulse the location update signal for the status line
+        _locationUpdates.postValue(payload.location.firstOrNull()?.ts)
     }
 
     private fun processGraph(json: JsonObject) {
@@ -235,6 +267,24 @@ object ClusterRepository {
         }
     }
 
+    private fun processTraffic(json: JsonObject) {
+        val inner = json.getAsJsonObject("traffic") ?: return
+        val entry = TrafficEntry(
+            receivedMs  = System.currentTimeMillis(),
+            bytesIn     = inner.get("bytesIn")?.asLong    ?: 0L,
+            bytesOut    = inner.get("bytesOut")?.asLong   ?: 0L,
+            packetsIn   = inner.get("packetsIn")?.asLong  ?: 0L,
+            packetsOut  = inner.get("packetsOut")?.asLong ?: 0L
+        )
+        val nowMs   = System.currentTimeMillis()
+        val cutoff  = nowMs - MAX_TRAFFIC_MS
+        val updated = (_trafficEntries.value?.toMutableList() ?: mutableListOf()).also { list ->
+            list.add(entry)
+            list.removeAll { it.receivedMs < cutoff }
+        }
+        _trafficEntries.postValue(updated)
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     fun getDeviceById(id: String): DeviceState? = deviceMap[id]
@@ -255,5 +305,8 @@ object ClusterRepository {
         _neighbors.postValue(null)
         _graphData.postValue(null)
         _messages.postValue(emptyList())
+        _locationUpdates.postValue(null)
+        _trafficEntries.postValue(emptyList())
+        _pingEntries.postValue(emptyList())
     }
 }

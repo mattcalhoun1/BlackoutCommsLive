@@ -22,7 +22,8 @@ data class SelfDevice(
     val ts: String,
     val relayState: String?,
     val motion: String?,
-    val temperature: String?
+    val temperature: String?,
+    val cluster: String? = null
 )
 
 // ── Devices ───────────────────────────────────────────────────────────────────
@@ -151,3 +152,31 @@ data class DeviceState(
 )
 
 enum class NeighborType { NONE, DIRECT, INDIRECT }
+
+// ── Traffic ───────────────────────────────────────────────────────────────────
+
+data class TrafficPayload(
+    val bytesIn: Long,
+    val bytesOut: Long,
+    val packetsIn: Long,
+    val packetsOut: Long
+)
+
+/** A traffic sample stamped with the wall-clock time it was received. */
+data class TrafficEntry(
+    val receivedMs: Long,
+    val bytesIn: Long,
+    val bytesOut: Long,
+    val packetsIn: Long,
+    val packetsOut: Long
+)
+
+// ── Ping (neighbor sighting) ──────────────────────────────────────────────────
+
+/** One neighbor sighting extracted from a neighbors payload for the ping list. */
+data class PingEntry(
+    val receivedMs: Long,
+    val deviceId: String,
+    val rssi: Int?,
+    val isDirect: Boolean
+)

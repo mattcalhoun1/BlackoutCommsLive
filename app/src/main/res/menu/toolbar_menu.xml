@@ -9,6 +9,18 @@
         app:showAsAction="always" />
 
     <item
+        android:id="@+id/action_show_messages"
+        android:title="Show Messages"
+        android:checkable="true"
+        android:checked="true"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_forget_ble"
+        android:title="Forget BLE Device"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_clear"
         android:title="Clear Data"
         app:showAsAction="never" />

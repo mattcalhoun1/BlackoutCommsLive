@@ -16,6 +16,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.data.ClusterRepository
+import com.blackoutcomms.live.util.BlePreferences
 import com.blackoutcomms.live.ui.MainActivity
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
@@ -265,36 +266,59 @@ class ConnectionService : Service() {
     private val _bleState = MutableLiveData(BleFeedManager.BleState.IDLE)
     val bleState: LiveData<BleFeedManager.BleState> = _bleState
 
+    /**
+     * If a BLE device has been saved previously, connect directly to it (with
+     * saved PIN if any). Otherwise post NEEDS_SCAN so the UI can start the
+     * scan-and-pick flow.
+     */
     fun startBle() {
-        bleFeedManager?.closeBle()
-        bleFeedManager = BleFeedManager(this).also { mgr ->
-            // Mirror the manager's state into our stable service-level LiveData.
-            // Must observe on the main thread since LiveData.observe() requires it.
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                mgr.bleState.observeForever { state ->
-                    _bleState.postValue(state)
-                }
-            }
-            mgr.startScan(this) { device ->
-                Log.i(TAG, "BLE device found: ${device.address}")
-                mgr.connectBle(device)
-            }
+        val saved = BlePreferences.load(this)
+        if (saved != null) {
+            Log.i(TAG, "Reconnecting to saved BLE device: ${saved.address}")
+            connectBleWithPin(saved.address, autoConnect = true)
+        } else {
+            // Signal UI to show the device picker flow
+            _bleState.postValue(BleFeedManager.BleState.NEEDS_SCAN)
         }
     }
 
-    fun connectBle(deviceAddress: String) {
-        bleFeedManager?.close()
+    /**
+     * Connect to a specific address. Bonding handled automatically by the Android OS.
+     *
+     * [autoConnect] = true (default for saved devices) delegates to the Android OS
+     * background reconnect mechanism — the connection is re-established automatically
+     * whenever the device comes into range, even after app restarts.
+     */
+    fun connectBleWithPin(address: String, pin: String? = null, autoConnect: Boolean = false) {
+        bleFeedManager?.closeBle()
         bleFeedManager = BleFeedManager(this).also { mgr ->
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                mgr.bleState.observeForever { state ->
-                    _bleState.postValue(state)
-                }
+                mgr.bleState.observeForever { state -> _bleState.postValue(state) }
             }
-            val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-            val device  = adapter?.getRemoteDevice(deviceAddress) ?: return
-            mgr.connect(device)
+            mgr.connectByAddress(address, autoConnect = autoConnect)
         }
     }
+
+    /**
+     * Start a scan and return results via callback so the UI can show a picker.
+     */
+    fun scanForBleDevices(onResults: (List<android.bluetooth.le.ScanResult>) -> Unit) {
+        bleFeedManager?.closeBle()
+        bleFeedManager = BleFeedManager(this).also { mgr ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                mgr.bleState.observeForever { state -> _bleState.postValue(state) }
+            }
+            mgr.startScan(this, onResults = onResults)
+        }
+    }
+
+    /** Stop an in-progress scan — called when the user cancels the scan dialog. */
+    fun stopBleScan() {
+        bleFeedManager?.stopScan()
+        _bleState.postValue(BleFeedManager.BleState.IDLE)
+    }
+
+    fun connectBle(deviceAddress: String) = connectBleWithPin(deviceAddress)
 
     /** Single stable accessor — always returns the same LiveData instance. */
     fun getCurrBleState(): LiveData<BleFeedManager.BleState> = bleState
@@ -310,7 +334,7 @@ class ConnectionService : Service() {
         usbJob = null
         testJob?.cancel()
         testJob = null
-        bleFeedManager?.close()
+        bleFeedManager?.closeBle()
         bleFeedManager = null
         _usbState.postValue(UsbState.IDLE)
     }

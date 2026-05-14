@@ -4,9 +4,13 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.model.DeviceState
 import com.blackoutcomms.live.util.TimestampUtil
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.*
 
 class MapViewModel : ViewModel() {
@@ -30,7 +34,7 @@ class MapViewModel : ViewModel() {
         ALL_TIME      ("All Time",    null)
     }
 
-    private val _selectedMaxAge = MutableLiveData(MaxAge.ALL_TIME)
+    private val _selectedMaxAge = MutableLiveData(MaxAge.ONE_HOUR)
     val selectedMaxAge: LiveData<MaxAge> = _selectedMaxAge
 
     // Set of device IDs the user has explicitly hidden (empty = all visible)
@@ -39,6 +43,10 @@ class MapViewModel : ViewModel() {
 
     private val _criticalOnly = MutableLiveData(false)
     val criticalOnly: LiveData<Boolean> = _criticalOnly
+
+    // Controlled by MainActivity via the Show Messages menu item
+    private val _showMessages = MutableLiveData(true)
+    val showMessages: LiveData<Boolean> = _showMessages
 
     // ── Filtered output ───────────────────────────────────────────────────────
 
@@ -97,5 +105,72 @@ class MapViewModel : ViewModel() {
 
     fun setCriticalOnly(enabled: Boolean) {
         _criticalOnly.value = enabled
+    }
+
+    fun setShowMessages(show: Boolean) {
+        _showMessages.value = show
+    }
+
+    // ── Status line ───────────────────────────────────────────────────────────
+
+    private val _statusText = MutableLiveData("Ready")
+    val statusText: LiveData<String> = _statusText
+
+    // When true, the status is "Receiving full mesh view" and will only be
+    // cleared when a graph payload arrives — other payloads don't override it.
+    private var awaitingGraph = false
+
+    private var pingResetJob: Job? = null
+
+    /**
+     * Called by MapFragment observers when each payload type arrives.
+     * Priority (highest first):
+     *   1. awaitingGraph = true  →  "Receiving full mesh view" (sticky until graph)
+     *   2. self payload          →  "Receiving GPS"
+     *   3. message payload       →  "Receiving Message"
+     *   4. neighbors / location  →  "Incoming ping" (auto-reset after 1 s)
+     */
+    fun onBleConnected() {
+        awaitingGraph = true
+        _statusText.value = "Receiving full mesh view"
+    }
+
+    fun onGraphReceived() {
+        if (awaitingGraph) {
+            awaitingGraph = false
+            _statusText.value = "Ready"
+        }
+    }
+
+    fun onSelfReceived() {
+        if (awaitingGraph) return   // don't override sticky mesh-view status
+        _statusText.value = "Receiving GPS"
+        schedulePingReset()
+    }
+
+    fun onMessageReceived() {
+        if (awaitingGraph) return
+        _statusText.value = "Receiving Message"
+        schedulePingReset()
+    }
+
+    fun onPingReceived() {
+        if (awaitingGraph) return
+        _statusText.value = "Incoming ping"
+        schedulePingReset()
+    }
+
+    /** Auto-reset to "Ready" after 1 second, cancelling any previous timer. */
+    private fun schedulePingReset() {
+        pingResetJob?.cancel()
+        pingResetJob = viewModelScope.launch {
+            delay(1_000)
+            _statusText.value = "Ready"
+        }
+    }
+
+    override fun onCleared() {
+        pingResetJob?.cancel()
+        super.onCleared()
     }
 }

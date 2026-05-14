@@ -13,6 +13,23 @@
         android:clickable="true"
         android:focusable="true" />
 
+    <!-- Cluster label — top-left -->
+    <TextView
+        android:id="@+id/tv_cluster"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="10dp"
+        android:text="Cluster: loading..."
+        android:textColor="@color/text_primary"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:background="@drawable/bg_semi_dark"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp" />
+
     <!-- Top-right checkbox strip: Critical + Mesh Graph -->
     <LinearLayout
         android:id="@+id/top_controls"
@@ -55,19 +72,59 @@
 
     </LinearLayout>
 
-    <!-- Bottom filter bar: Max Age + Devices (sits above message panel) -->
+    <!-- Recenter button — bottom-left corner, above the filter bar -->
+    <ImageButton
+        android:id="@+id/btn_recenter"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="82dp"
+        android:src="@drawable/ic_recenter"
+        android:background="@drawable/bg_semi_dark"
+        android:padding="8dp"
+        android:contentDescription="Re-center map on self" />
+
+    <!-- Status + filter bar stacked together at the bottom -->
     <LinearLayout
         android:id="@+id/bottom_filter_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@color/message_panel_bg"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:orientation="vertical"
+        android:background="@color/message_panel_bg">
+
+        <!-- Status line -->
+        <TextView
+            android:id="@+id/tv_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ready"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_secondary"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="2dp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider" />
+
+        <!-- Buttons row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_max_age"
@@ -100,8 +157,26 @@
             android:insetTop="0dp"
             android:insetBottom="0dp"
             app:strokeColor="@color/accent"
+            app:backgroundTint="@color/surface_filter_btn"
+            android:layout_marginEnd="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_map_layer"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:text="ESRI Topo"
+            android:textSize="12sp"
+            android:textColor="@color/text_primary"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            app:strokeColor="@color/accent"
             app:backgroundTint="@color/surface_filter_btn" />
 
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Message panel (slides up over the filter bar when messages arrive) -->

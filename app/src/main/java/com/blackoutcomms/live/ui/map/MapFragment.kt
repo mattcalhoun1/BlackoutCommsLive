@@ -1,21 +1,20 @@
 package com.blackoutcomms.live.ui.map
 
+import android.content.Context
 import android.os.Bundle
 import android.view.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.blackoutcomms.live.R
+import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.databinding.FragmentMapBinding
 import com.blackoutcomms.live.model.DeviceState
+import com.blackoutcomms.live.util.TileSources
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
-import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.osmdroid.util.MapTileIndex
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import java.io.File
@@ -33,6 +32,13 @@ class MapFragment : Fragment() {
     private var lastZoom = 0.0
     private var downloadWarningShown = false
 
+    companion object {
+        private const val PREFS_NAME = "map_prefs"
+        private const val PREF_TILE_SOURCE = "tile_source"
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
@@ -45,16 +51,13 @@ class MapFragment : Fragment() {
 
         Configuration.getInstance().apply {
             userAgentValue = requireContext().packageName
-            // Use filesDir (permanent private app storage) rather than cacheDir.
-            // cacheDir is a temporary directory the OS can wipe at any time when
-            // storage is low, or the user clears the app cache in Settings.
-            // filesDir is only removed when the app is fully uninstalled.
+            // filesDir = permanent private storage; never cleared by the OS.
+            // Each tile source caches under its own subdirectory (keyed by source name)
+            // so switching layers never invalidates the other source's cached tiles.
             osmdroidBasePath  = File(requireContext().filesDir, "osmdroid")
             osmdroidTileCache = File(requireContext().filesDir, "osmdroid/tiles")
-            // No expiry: once a tile is downloaded it is kept indefinitely.
-            // Set to a positive value (milliseconds) if you want staleness eviction.
-            tileDownloadMaxQueueSize = 40          // parallel download slots
-            expirationOverrideDuration = -1L       // -1 = never expire cached tiles
+            tileDownloadMaxQueueSize  = 40
+            expirationOverrideDuration = -1L   // never expire cached tiles
         }
 
         setupMap()
@@ -67,23 +70,6 @@ class MapFragment : Fragment() {
 
     private fun setupMap() {
         binding.mapView.apply {
-            // ESRI World Topo Map — muted earth tones, contour lines, terrain shading.
-            // Completely free, no API key required.
-            // ESRI uses {z}/{y}/{x} tile order (y before x), so we subclass
-            // OnlineTileSourceBase to build the URL correctly.
-            val esriTopo = object : OnlineTileSourceBase(
-                "ESRI.WorldTopoMap", 0, 19, 256, "",
-                arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/"),
-                "© ESRI, HERE, Garmin, FAO, NOAA, USGS"
-            ) {
-                override fun getTileURLString(pMapTileIndex: Long): String {
-                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
-                    val x    = MapTileIndex.getX(pMapTileIndex)
-                    val y    = MapTileIndex.getY(pMapTileIndex)
-                    return "${baseUrl}${zoom}/${y}/${x}"
-                }
-            }
-            setTileSource(esriTopo)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
             setMultiTouchControls(true)
             controller.setZoom(14.0)
@@ -101,6 +87,54 @@ class MapFragment : Fragment() {
                 }
             })
         }
+        // Apply saved tile source (defaults to ESRI Topo on first launch)
+        applyTileSource(loadSavedTileSource())
+    }
+
+    // ── Tile source persistence ───────────────────────────────────────────────
+
+    private fun loadSavedTileSource(): TileSources.Source {
+        val prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key   = prefs.getString(PREF_TILE_SOURCE, TileSources.DEFAULT.prefKey)
+        return TileSources.Source.values().firstOrNull { it.prefKey == key }
+            ?: TileSources.DEFAULT
+    }
+
+    private fun saveTileSource(source: TileSources.Source) {
+        requireContext()
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_TILE_SOURCE, source.prefKey)
+            .apply()
+    }
+
+    /**
+     * Switches the map to [source] and updates the button label.
+     * OSMDroid keeps each source's tiles in a subdirectory named after the
+     * source's unique name string, so both caches accumulate independently —
+     * switching back to a previously-used source instantly uses cached tiles.
+     */
+    private fun applyTileSource(source: TileSources.Source) {
+        binding.mapView.setTileSource(TileSources.build(source))
+        binding.btnMapLayer.text = source.label
+    }
+
+    private fun showTileSourcePicker() {
+        val sources  = TileSources.Source.values()
+        val labels   = sources.map { it.label }.toTypedArray()
+        val current  = loadSavedTileSource()
+        val checked  = sources.indexOf(current)
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Map Tiles")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                val chosen = sources[which]
+                saveTileSource(chosen)
+                applyTileSource(chosen)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showDownloadWarning() {
@@ -121,7 +155,6 @@ class MapFragment : Fragment() {
     // ── Filter controls ───────────────────────────────────────────────────────
 
     private fun setupFilterControls() {
-        // Ensure the filter bar is visible on startup
         binding.bottomFilterBar.visibility = View.VISIBLE
 
         // Max Age popup
@@ -129,11 +162,9 @@ class MapFragment : Fragment() {
             val options = MapViewModel.MaxAge.values()
             val labels  = options.map { it.label }.toTypedArray()
             val current = viewModel.selectedMaxAge.value ?: MapViewModel.MaxAge.ALL_TIME
-            val checkedIdx = options.indexOf(current)
-
             AlertDialog.Builder(requireContext())
                 .setTitle("Maximum Age")
-                .setSingleChoiceItems(labels, checkedIdx) { dialog, which ->
+                .setSingleChoiceItems(labels, options.indexOf(current)) { dialog, which ->
                     viewModel.setMaxAge(options[which])
                     dialog.dismiss()
                 }
@@ -143,7 +174,6 @@ class MapFragment : Fragment() {
 
         // Device picker
         binding.btnDevices.setOnClickListener {
-            // Only show if we have devices to pick from
             val states = viewModel.allDeviceStates.value ?: emptyMap()
             if (states.isEmpty()) {
                 AlertDialog.Builder(requireContext())
@@ -153,6 +183,11 @@ class MapFragment : Fragment() {
                 return@setOnClickListener
             }
             DevicePickerDialog().show(childFragmentManager, DevicePickerDialog.TAG)
+        }
+
+        // Map layer picker
+        binding.btnMapLayer.setOnClickListener {
+            showTileSourcePicker()
         }
 
         // Critical only checkbox
@@ -171,72 +206,93 @@ class MapFragment : Fragment() {
             binding.messagePanel.visibility = View.GONE
             binding.bottomFilterBar.visibility = View.VISIBLE
         }
+
+        // Recenter map on self
+        binding.btnRecenter.setOnClickListener {
+            val self = viewModel.selfDevice.value ?: return@setOnClickListener
+            val lat  = self.lat.toDoubleOrNull() ?: return@setOnClickListener
+            val lon  = self.lon.toDoubleOrNull() ?: return@setOnClickListener
+            binding.mapView.controller.animateTo(GeoPoint(lat, lon))
+        }
     }
 
-    // ── Observers ─────────────────────────────────────────────────────────────
+    // ── Message panel ─────────────────────────────────────────────────────────
 
     private fun setupMessagePanel() {
         messageAdapter = MessageAdapter(requireContext())
         binding.recyclerMessages.adapter = messageAdapter
     }
 
+    // ── Observers ─────────────────────────────────────────────────────────────
+
     private fun setupObservers() {
-        // Centre map on self once, create overlay
+        // Create the overlay as soon as we know the self ID, regardless of whether
+        // we have a self location yet. Centering is handled separately below.
         viewModel.selfDevice.observe(viewLifecycleOwner) { self ->
             self ?: return@observe
-            val lat = self.lat.toDoubleOrNull() ?: return@observe
-            val lon = self.lon.toDoubleOrNull() ?: return@observe
 
-            if (!mapInitialised) {
-                binding.mapView.controller.setCenter(GeoPoint(lat, lon))
-                mapInitialised = true
+            // Update cluster label
+            binding.tvCluster.text = if (!self.cluster.isNullOrBlank())
+                "Cluster: ${self.cluster}" else "Cluster: loading..."
+
+            if (deviceOverlay == null) {
                 deviceOverlay = DeviceOverlay(requireContext(), self.id) { state ->
                     showDeviceDetail(state)
                 }
                 binding.mapView.overlays.add(deviceOverlay)
             }
+            // Centre on self if we have coordinates and haven't centred yet
+            if (!mapInitialised) {
+                val lat = self.lat.toDoubleOrNull() ?: return@observe
+                val lon = self.lon.toDoubleOrNull() ?: return@observe
+                binding.mapView.controller.setCenter(GeoPoint(lat, lon))
+                mapInitialised = true
+            }
         }
 
-        // Filtered device states → overlay
         viewModel.filteredDeviceStates.observe(viewLifecycleOwner) { states ->
             deviceOverlay?.deviceStates = states
             binding.mapView.invalidate()
+
+            // Fallback: if self location hasn't arrived yet but other devices have
+            // known positions, centre on the first one we find. Once mapInitialised
+            // is true this block never runs again.
+            if (!mapInitialised) {
+                val anchor = states.values.firstOrNull { it.lat != null && it.lon != null }
+                if (anchor != null) {
+                    binding.mapView.controller.setCenter(GeoPoint(anchor.lat!!, anchor.lon!!))
+                    mapInitialised = true
+                }
+            }
         }
 
-        // Graph data → overlay
         viewModel.graphData.observe(viewLifecycleOwner) { graph ->
             deviceOverlay?.graphData = graph
             binding.mapView.invalidate()
         }
 
-        // Max age label on button
         viewModel.selectedMaxAge.observe(viewLifecycleOwner) { age ->
             binding.btnMaxAge.text = age.label
         }
 
-        // Hidden devices count on button
         viewModel.hiddenDeviceIds.observe(viewLifecycleOwner) { hidden ->
-            val total = viewModel.allDeviceStates.value?.size ?: 0
+            val total   = viewModel.allDeviceStates.value?.size ?: 0
             val visible = total - hidden.size
-            binding.btnDevices.text = when {
-                hidden.isEmpty() -> "Devices: All"
-                else             -> "Devices: $visible/$total"
-            }
+            binding.btnDevices.text = if (hidden.isEmpty()) "Devices: All"
+                                      else "Devices: $visible/$total"
         }
 
-        // Also update device button label when total device count changes
         viewModel.allDeviceStates.observe(viewLifecycleOwner) { all ->
-            val hidden = viewModel.hiddenDeviceIds.value ?: emptySet()
+            val hidden  = viewModel.hiddenDeviceIds.value ?: emptySet()
             val visible = all.size - hidden.size
-            binding.btnDevices.text = when {
-                hidden.isEmpty() -> "Devices: All"
-                else             -> "Devices: $visible/${all.size}"
-            }
+            binding.btnDevices.text = if (hidden.isEmpty()) "Devices: All"
+                                      else "Devices: $visible/${all.size}"
         }
 
-        // Messages
+        // Messages — gated by the Show Messages preference
         viewModel.messages.observe(viewLifecycleOwner) { messages ->
-            if (messages.isNotEmpty()) {
+            val showMessages = viewModel.showMessages.value ?: true
+            if (messages.isNotEmpty() && showMessages) {
                 val selfId = viewModel.selfDevice.value?.id ?: ""
                 messageAdapter?.submitList(messages, selfId)
                 binding.messagePanel.visibility = View.VISIBLE
@@ -246,12 +302,61 @@ class MapFragment : Fragment() {
                 binding.bottomFilterBar.visibility = View.VISIBLE
             }
         }
+
+        // When Show Messages is toggled, immediately re-evaluate current messages
+        viewModel.showMessages.observe(viewLifecycleOwner) { show ->
+            val messages = viewModel.messages.value ?: emptyList()
+            if (messages.isNotEmpty() && show) {
+                val selfId = viewModel.selfDevice.value?.id ?: ""
+                messageAdapter?.submitList(messages, selfId)
+                binding.messagePanel.visibility = View.VISIBLE
+                binding.bottomFilterBar.visibility = View.GONE
+            } else {
+                binding.messagePanel.visibility = View.GONE
+                binding.bottomFilterBar.visibility = View.VISIBLE
+            }
+        }
+
+        // ── Status line ───────────────────────────────────────────────────────
+
+        viewModel.statusText.observe(viewLifecycleOwner) { text ->
+            binding.tvStatus.text = text
+        }
+
+        // Trigger status updates from each payload type
+        viewModel.selfDevice.observe(viewLifecycleOwner) { self ->
+            if (self != null) viewModel.onSelfReceived()
+        }
+
+        ClusterRepository.neighbors.observe(viewLifecycleOwner) { nbrs ->
+            if (nbrs != null) viewModel.onPingReceived()
+        }
+
+        ClusterRepository.locationUpdates.observe(viewLifecycleOwner) { loc ->
+            if (loc != null) viewModel.onPingReceived()
+        }
+
+        viewModel.graphData.observe(viewLifecycleOwner) { graph ->
+            if (graph != null) viewModel.onGraphReceived()
+        }
+
+        viewModel.messages.observe(viewLifecycleOwner) { msgs ->
+            // Only signal "Receiving Message" when a new message actually arrives
+            // (list grows), not on initial subscription emit
+            val prev = previousMessageCount
+            previousMessageCount = msgs.size
+            if (msgs.size > prev) viewModel.onMessageReceived()
+        }
     }
+
+    private var previousMessageCount = 0
 
     private fun showDeviceDetail(state: DeviceState) {
         DeviceDetailBottomSheet.newInstance(state.device.id)
             .show(childFragmentManager, "device_detail")
     }
+
+    // ── OSMDroid lifecycle ────────────────────────────────────────────────────
 
     override fun onResume() {
         super.onResume()

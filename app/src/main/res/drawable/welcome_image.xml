@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder — replace this file with welcome_image.png once provided.
+     Drop the PNG into app/src/main/res/drawable/ with the filename welcome_image.png
+     and delete this XML file. The layout references @drawable/welcome_image so
+     no other code changes are needed. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <path
+        android:fillColor="#1A2E1A"
+        android:pathData="M0,0 L200,0 L200,200 L0,200 Z" />
+    <path
+        android:fillColor="#7A9E5F"
+        android:pathData="M100,40 L120,80 L160,80 L130,105 L140,145 L100,120 L60,145 L70,105 L40,80 L80,80 Z" />
+    <path
+        android:strokeColor="#6E7A63"
+        android:strokeWidth="1"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,190 L190,190" />
+    <path
+        android:fillColor="#6E7A63"
+        android:pathData="M85,160 L115,160 L115,168 L85,168 Z" />
+    <path
+        android:fillColor="#6E7A63"
+        android:pathData="M70,185 Q100,175 130,185" />
+</vector>

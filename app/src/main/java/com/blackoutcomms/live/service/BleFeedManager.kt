@@ -1,13 +1,15 @@
 package com.blackoutcomms.live.service
-
-import android.Manifest
-import android.bluetooth.BluetoothAdapter
+import java.util.jar.Manifest
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.le.ScanCallback
+import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.os.Build
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.LiveData
@@ -40,17 +42,23 @@ class BleFeedManager(context: Context) : BleManager(context) {
     companion object {
         private const val TAG = "BleFeedManager"
 
-        val SERVICE_UUID : UUID = UUID.fromString("18aeec00-8c60-411b-b958-78c5049be0f3")
-        val RX_CHAR_UUID : UUID = UUID.fromString("18aeec02-8c60-411b-b958-78c5049be0f3") // phone ← device (notify)
-        val TX_CHAR_UUID : UUID = UUID.fromString("18aeec01-8c60-411b-b958-78c5049be0f3") // phone → device (write)
+        val SERVICE_UUID: UUID = UUID.fromString("18aeec00-8c60-411b-b958-78c5049be0f3")
+        val RX_CHAR_UUID: UUID =
+            UUID.fromString("18aeec02-8c60-411b-b958-78c5049be0f3") // phone ← device (notify)
+        val TX_CHAR_UUID: UUID =
+            UUID.fromString("18aeec01-8c60-411b-b958-78c5049be0f3") // phone → device (write)
 
         // Name filter for startScan() — match what nRF Connect shows for your device
-        const val DEVICE_NAME_FILTER = "BlackoutComms"
+        const val DEVICE_NAME_PREFIX = "BC-"
+    }
+    // Use BluetoothManager instead of deprecated getDefaultAdapter()
+    private val btAdapter: android.bluetooth.BluetoothAdapter? by lazy {
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    enum class BleState { IDLE, SCANNING, CONNECTING, CONNECTED, DISCONNECTED, NOT_SUPPORTED }
+    enum class BleState { IDLE, SCANNING, NEEDS_SCAN, CONNECTING, CONNECTED, DISCONNECTED, NOT_SUPPORTED }
 
     private val _bleState = MutableLiveData(BleState.IDLE)
     val bleState: LiveData<BleState> = _bleState
@@ -60,11 +68,20 @@ class BleFeedManager(context: Context) : BleManager(context) {
     private var rxCharacteristic: BluetoothGattCharacteristic? = null  // device → phone
     private var txCharacteristic: BluetoothGattCharacteristic? = null  // phone → device
 
-    // ── Line assembly buffer ──────────────────────────────────────────────────
+    // ── Line assembly buffer + reconnect state ───────────────────────────────
 
     private val lineBuffer = StringBuilder()
 
-    private var largeMessageIncoming = false;
+    // Remembers the last connected device so we can reconnect after a drop
+    private var lastDevice: BluetoothDevice? = null
+
+    // Set to false by close() so that an intentional disconnect does not
+    // trigger the auto-reconnect logic in onDeviceDisconnected
+    private var requestedDump = false
+    // trigger the auto-reconnect logic in onDeviceDisconnected
+    private var shouldReconnect = false
+
+    private val reconnectHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     // ── BleManager overrides ──────────────────────────────────────────────────
 
@@ -84,7 +101,10 @@ class BleFeedManager(context: Context) : BleManager(context) {
             return false
         }
 
-        txCharacteristic = service.getCharacteristic(TX_CHAR_UUID)
+        txCharacteristic = service.getCharacteristic(TX_CHAR_UUID) ?: run {
+            Log.e(TAG, "TX characteristic $TX_CHAR_UUID not found")
+            return false;
+        }
         // TX is optional — only needed if the app sends commands back to the device
 
         // Verify the RX characteristic has the NOTIFY or INDICATE property
@@ -102,25 +122,27 @@ class BleFeedManager(context: Context) : BleManager(context) {
 
     /**
      * Called after isRequiredServiceSupported() returns true.
-     * Set up the request queue: negotiate MTU, then enable notifications.
-     * Nordic serialises these automatically — no manual callback chaining needed.
+     *
+     * By this point bonding has already been handled externally by
+     * connectDevice() — if the device needed bonding, we waited for
+     * BOND_BONDED before ever calling connect(). So initialize() can
+     * proceed directly to MTU + notifications with no bonding logic here.
      */
     override fun initialize() {
-        // Request a large MTU to reduce fragmentation of JSON payloads.
-        // 512 is the BLE spec maximum; the actual negotiated value will be
-        // whatever both sides agree on (typically 247 on modern Android + firmware).
-        requestMtu(247)
-            .with { _, mtu -> Log.i(TAG, "MTU negotiated: $mtu bytes") }
+        // Register data callback — not a queued operation
+        setNotificationCallback(rxCharacteristic)
+            .with { _, data -> onDataReceived(data) }
+
+        // MTU negotiation — .fail() prevents queue stall if firmware rejects
+        requestMtu(512)
+            .with   { _, mtu    -> Log.i(TAG, "MTU negotiated: $mtu bytes") }
+            .fail   { _, status -> Log.w(TAG, "MTU rejected (status $status), using default") }
             .enqueue()
 
-        // Enable notifications on the RX characteristic.
-        // Nordic handles writing to the CCCD descriptor automatically.
-        setNotificationCallback(rxCharacteristic)
-            .with(DataReceivedCallback { _, data -> onDataReceived(data) })
-
+        // Enable notifications — by now bonding is complete so this should succeed
         enableNotifications(rxCharacteristic)
             .done { Log.i(TAG, "Notifications enabled on RX characteristic") }
-            .fail { _, status -> Log.e(TAG, "Failed to enable notifications, status=$status") }
+            .fail { _, status -> Log.e(TAG, "enableNotifications failed, status=$status") }
             .enqueue()
     }
 
@@ -145,38 +167,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
      * and dispatches complete lines to ClusterRepository.
      */
     private fun onDataReceived(data: Data) {
-        Log.w("ble", "BLE data received ${data.size()} ${data.getStringValue(0)}")
-        /*var soloMessage = false;
-        // is this a large message header or ending?
-        val thisStr = data.getStringValue(0)
-        if (thisStr!!.indexOf("largeBegin") >= 0) {
-            Log.i("ble", "Large message incoming")
-            largeMessageIncoming = true;
-        }
-        else if (thisStr.indexOf("largeEnd") != -1) {
-            Log.i("ble", "end large message")
-            largeMessageIncoming = false;
-        }
-        else {
-            soloMessage = true;
-        }
-        val chunk = data.getStringValue(0) ?: return
-
-        // if this is part of a large message, append it and continue waiting
-        if (largeMessageIncoming) {
-            //lineBuffer.append(chunk)
-        }
-        else {
-            if (soloMessage) {
-                lineBuffer.append(chunk)
-            }
-
-            // if we have data, ingest it now
-            if (lineBuffer.length > 0) {
-                Log.w("ble", "BLE Data: ${lineBuffer.toString()}")
-                ClusterRepository.ingest(lineBuffer.toString())
-                lineBuffer.clear();
-            }*/
+        //Log.w("ble", "BLE data received ${data.size()} ${data.getStringValue(0)}")
         val chunk = data.getStringValue(0) ?: return
         lineBuffer.append(chunk)
         // keep accepting messages until carriage return is received
@@ -184,13 +175,27 @@ class BleFeedManager(context: Context) : BleManager(context) {
 
         // did we find the end of the larger message
         if (lineBuffer.indexOf('\n') != -1) {
-            Log.w("ble", "Full String: ${lineBuffer.toString()}")
+            //Log.w("ble", "Full String: ${lineBuffer.toString()}")
             ClusterRepository.ingest(lineBuffer.toString())
             lineBuffer.clear();
         }
         else {
             //Log.w("ble", "Partial: ${lineBuffer.toString()}")
         }
+
+        /*if (!requestedDump) {
+            if (txCharacteristic != null) {
+                Log.i("ble", "Request data dump")
+                txCharacteristic?.setValue("dump");
+                requestedDump = true;
+            }
+            else {
+                Log.i("ble", "tx Characteristic is null")
+            }
+        }
+        else {
+            Log.i("ble", "Dump already requested")
+        }*/
     }
 
     // ── Sending data to the device (optional) ─────────────────────────────────
@@ -213,66 +218,179 @@ class BleFeedManager(context: Context) : BleManager(context) {
 
     // ── Scan + connect ────────────────────────────────────────────────────────
 
+    private var activeScanCallback: android.bluetooth.le.ScanCallback? = null
+
     /**
-     * Scans for a device matching DEVICE_NAME_FILTER and connects to the first
-     * one found. The scan is handled outside BleManager (BleManager itself only
-     * manages the connection, not scanning) — pass the found device to connect().
-     *
-     * Recommended: use Nordic's companion library 'no.nordicsemi.android:scanner'
-     * for production scan management, or use the raw BluetoothLeScanner below.
+     * Scans for all devices whose advertised name starts with DEVICE_NAME_PREFIX.
+     * Results accumulate for [durationMs] ms then [onResults] is called with the
+     * full deduplicated list so the UI can show a picker. Call stopScan() to cancel.
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun startScan(context: Context, onFound: (BluetoothDevice) -> Unit) {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
-        val scanner  = adapter.bluetoothLeScanner ?: return
+    fun startScan(
+        context: Context,
+        durationMs: Long = 8_000L,
+        onResults: (List<android.bluetooth.le.ScanResult>) -> Unit
+    ) {
+        val scanner = btAdapter?.bluetoothLeScanner ?: return
 
         _bleState.postValue(BleState.SCANNING)
+        val found = mutableMapOf<String, android.bluetooth.le.ScanResult>()
 
-        val scanCallback = object : ScanCallback() {
-            @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val name = result.device.name ?: return
-                if (name.contains(DEVICE_NAME_FILTER, ignoreCase = true)) {
-                    Log.i(TAG, "Found device: $name (${result.device.address})")
-                    scanner.stopScan(this)
-                    onFound(result.device)
+        val callback = object : android.bluetooth.le.ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
+                if (matchesPrefix(result)) {
+                    val display = resolveDisplayName(result)
+                    Log.i(TAG, "Scan hit: ${'$'}display (${'$'}{result.device.address})")
+                    found[result.device.address] = result
                 }
             }
             override fun onScanFailed(errorCode: Int) {
-                Log.e(TAG, "BLE scan failed: $errorCode")
+                Log.e(TAG, "BLE scan failed: ${'$'}errorCode")
                 _bleState.postValue(BleState.IDLE)
+                onResults(emptyList())
             }
         }
+        activeScanCallback = callback
+        scanner.startScan(callback)
 
-        scanner.startScan(scanCallback)
-        Log.i(TAG, "BLE scan started, looking for '$DEVICE_NAME_FILTER'")
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            scanner.stopScan(callback)
+            activeScanCallback = null
+            if (_bleState.value == BleState.SCANNING) _bleState.postValue(BleState.IDLE)
+            Log.i(TAG, "Scan complete, found ${'$'}{found.size} device(s)")
+            onResults(found.values.toList())
+        }, durationMs)
+
+        Log.i(TAG, "BLE scan started for prefix '$DEVICE_NAME_PREFIX'")
+    }
+
+    fun stopScan() {
+        val scanner = btAdapter?.bluetoothLeScanner ?: return
+        activeScanCallback?.let { scanner.stopScan(it) }
+        activeScanCallback = null
     }
 
     /**
-     * Connect to a specific device. Nordic's BleManager will:
-     *   - Establish the GATT connection
-     *   - Discover services
-     *   - Call isRequiredServiceSupported()
-     *   - Call initialize() to set up notifications
-     *   - Automatically reconnect if the link drops (while app is alive)
+     * Connect to a device by MAC address.
+     * [autoConnect] = true uses the Android OS background reconnect mechanism:
+     *   - slower initial connection (~5-30s) but the OS keeps trying indefinitely
+     *   - survives app restarts and phone reboots (while Bluetooth is on)
+     *   - correct choice for a saved/known device
+     * [autoConnect] = false makes a direct one-shot attempt — faster but no retry.
+     *   - correct choice for a freshly scanned device the user just picked
      */
-    fun connectBle(device: BluetoothDevice) {
+    fun connectByAddress(address: String, autoConnect: Boolean = false) {
+        val device = try { btAdapter?.getRemoteDevice(address) ?: return }
+                      catch (e: Exception) { Log.e(TAG, "Invalid address: $address"); return }
+        connectBle(device, autoConnect)
+    }
+
+
+
+    /**
+     * Connect to a specific device (used from the picker after a fresh scan).
+     * Uses direct (non-auto) connect — fast one-shot attempt, no OS background retry.
+     * After this succeeds, [lastDevice] is stored so the reconnect logic can use it.
+     */
+    fun connectBle(device: BluetoothDevice, autoConnect: Boolean) = connectDevice(device, autoConnect)
+
+    /**
+     * Internal connect that honours the [autoConnect] flag.
+     *
+     * If the device is not yet bonded, we bond it BEFORE opening the GATT
+     * connection. This keeps bonding completely separate from the GATT
+     * request queue, avoiding any race between ensureBond() and
+     * enableNotifications() inside initialize().
+     *
+     * Flow for unbonded device:
+     *   1. device.createBond() → OS pairing dialog shown to user
+     *   2. BroadcastReceiver waits for BOND_BONDED
+     *   3. Only then calls doConnect() to open GATT
+     *   4. initialize() runs with clean queue: MTU → enableNotifications
+     *
+     * Flow for already-bonded device:
+     *   1. doConnect() immediately — no bonding step needed
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    private fun connectDevice(device: BluetoothDevice, autoConnect: Boolean) {
+        lastDevice      = device
+        shouldReconnect = true
         _bleState.postValue(BleState.CONNECTING)
 
-        connect(device)
-            .timeout(15_000)          // 15 s connection timeout
-            .retry(3, 1_000)    // retry up to 3 times with 1 s delay between attempts
-            .useAutoConnect(false)    // false = faster initial connect; set true for background reconnect
+        val bondState = device.bondState
+        val bondDesc  = when (bondState) {
+            BluetoothDevice.BOND_NONE    -> "BOND_NONE (10)"
+            BluetoothDevice.BOND_BONDING -> "BOND_BONDING (11)"
+            BluetoothDevice.BOND_BONDED  -> "BOND_BONDED (12)"
+            else -> "UNKNOWN ($bondState)"
+        }
+        Log.i(TAG, "connectDevice: ${device.address}, bondState=$bondDesc, autoConnect=$autoConnect")
+
+        if (bondState == BluetoothDevice.BOND_NONE) {
+            Log.i(TAG, "Device not bonded — initiating bond before GATT connect")
+            bondThenConnect(device, autoConnect)
+        } else {
+            // Already bonded (or bonding in progress) — connect directly
+            doConnect(device, autoConnect)
+        }
+    }
+
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    private fun bondThenConnect(device: BluetoothDevice, autoConnect: Boolean) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val d     = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                if (d?.address != device.address) return
+
+                when (state) {
+                    BluetoothDevice.BOND_BONDED -> {
+                        Log.i(TAG, "Bond established — proceeding with GATT connect")
+                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                        reconnectHandler.post { doConnect(device, autoConnect) }
+                    }
+                    BluetoothDevice.BOND_NONE -> {
+                        Log.w(TAG, "Bonding failed or was rejected")
+                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
+                        _bleState.postValue(BleState.DISCONNECTED)
+                    }
+                }
+            }
+        }
+        context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+
+        val started = device.createBond()
+        if (!started) {
+            Log.e(TAG, "createBond() returned false — trying GATT connect anyway")
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+            doConnect(device, autoConnect)
+        }
+    }
+
+    private fun doConnect(device: BluetoothDevice, autoConnect: Boolean) {
+        val req = connect(device).useAutoConnect(autoConnect)
+
+        if (!autoConnect) {
+            req.timeout(20_000).retry(3, 2_000)
+        } else {
+            req.timeout(0)
+        }
+
+        req
             .done {
-                Log.i(TAG, "Connected to ${device.address}")
+                Log.i(TAG, "Connected to ${device.address} (autoConnect=$autoConnect)")
                 _bleState.postValue(BleState.CONNECTED)
             }
             .fail { _, status ->
                 Log.e(TAG, "Connection failed to ${device.address}, status=$status")
                 _bleState.postValue(BleState.DISCONNECTED)
+                if (!autoConnect && shouldReconnect) {
+                    Log.i(TAG, "Direct connect failed (status $status) — switching to OS autoConnect")
+                    reconnectHandler.postDelayed({ doConnect(device, autoConnect = true) }, 3_000)
+                }
             }
             .invalid {
                 Log.e(TAG, "Device ${device.address} does not support required service")
+                shouldReconnect = false
                 _bleState.postValue(BleState.NOT_SUPPORTED)
             }
             .enqueue()
@@ -305,13 +423,84 @@ class BleFeedManager(context: Context) : BleManager(context) {
                 Log.i(TAG, "onDeviceDisconnected: ${device.address}, reason=$reason")
                 _bleState.postValue(BleState.DISCONNECTED)
                 lineBuffer.clear()
+
+                if (shouldReconnect) {
+                    Log.i(TAG, "Unexpected disconnect — scheduling reconnect in 5 s")
+                    reconnectHandler.postDelayed({
+                        if (!shouldReconnect) return@postDelayed
+                        // Re-fetch the device from the adapter rather than using the
+                        // stale callback object. Bond state can transiently read
+                        // BOND_NONE during disconnection; waiting 5 s lets it settle.
+                        val freshDevice = try {
+                            btAdapter?.getRemoteDevice(device.address)
+                        } catch (_: Exception) { null } ?: device
+
+                        Log.i(TAG, "Reconnecting to ${freshDevice.address}, bondState=${freshDevice.bondState}")
+                        connectDevice(freshDevice, autoConnect = true)
+                    }, 5_000)
+                }
             }
         })
+    }
+
+    // ── Name matching helpers ─────────────────────────────────────────────────
+
+    /**
+     * Returns true if any of the names the device advertises matches the
+     * BlackoutComms prefix. Checks (in order):
+     *   1. device.name       — the primary advertised name
+     *   2. device.alias      — user-set alias (API 30+); may carry the prefix too
+     *   3. scanRecord.deviceName — the raw BLE local-name field in the ad payload
+     *
+     * Any one match is sufficient.
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    private fun matchesPrefix(result: ScanResult): Boolean {
+        // 1. Primary advertised name
+        val name = result.device.name
+        if (!name.isNullOrBlank() && name.startsWith(DEVICE_NAME_PREFIX, ignoreCase = true))
+            return true
+
+        // 2. Raw local name from the BLE advertisement payload
+        // Note: device.alias is intentionally NOT checked here — it is a user-set
+        // phone-side label (not firmware-advertised) and accessing it from the
+        // ScanCallback Binder thread causes "FLAG_ONEWAY" transaction errors.
+        val localName = result.scanRecord?.deviceName
+        if (!localName.isNullOrBlank() && localName.startsWith(DEVICE_NAME_PREFIX, ignoreCase = true))
+            return true
+
+        return false
+    }
+
+    /**
+     * Returns the best human-readable name for a matching device to show in
+     * the picker UI. Prefers whichever name contains the BlackoutComms prefix,
+     * falling back to address if nothing useful is found.
+     */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    fun resolveDisplayName(result: android.bluetooth.le.ScanResult): String {
+        // Prefer the name that actually matches the prefix.
+        // device.alias is intentionally omitted — it is a phone-side user label
+        // and accessing it from scan callbacks causes FLAG_ONEWAY Binder errors.
+        val name = result.device.name
+        if (!name.isNullOrBlank() && name.startsWith(DEVICE_NAME_PREFIX, ignoreCase = true))
+            return name
+
+        val localName = result.scanRecord?.deviceName
+        if (!localName.isNullOrBlank() && localName.startsWith(DEVICE_NAME_PREFIX, ignoreCase = true))
+            return localName
+
+        // Fall back to primary name, scan record name, or address
+        return name?.takeIf { it.isNotBlank() }
+            ?: localName?.takeIf { it.isNotBlank() }
+            ?: result.device.address
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     fun closeBle() {
+        shouldReconnect = false          // prevent onDeviceDisconnected from retrying
+        reconnectHandler.removeCallbacksAndMessages(null)
         disconnect().enqueue()
         lineBuffer.clear()
         Log.i(TAG, "BleFeedManager closed")

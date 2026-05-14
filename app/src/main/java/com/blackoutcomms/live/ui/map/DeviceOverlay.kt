@@ -131,36 +131,39 @@ class DeviceOverlay(
         val arrowLen  = ARROW_LENGTH_DP * density
         val headSize  = ARROW_HEAD_DP  * density
 
-        // Convert compass bearing to math angle:
-        //   compass 0° = north = screen up = math -90° (or 270°)
-        //   compass 90° = east = screen right = math 0°
-        val rad = Math.toRadians((headingDeg - 90.0))
-
-        val cosA = Math.cos(rad).toFloat()
-        val sinA = Math.sin(rad).toFloat()
+        // Compass bearing to Android screen vector:
+        //   0° north → dx=0,  dy=-1 (up)
+        //   90° east  → dx=+1, dy=0  (right)
+        //   180° south → dx=0, dy=+1 (down)
+        //   270° west  → dx=-1, dy=0  (left)
+        // Android canvas Y increases downward, so:
+        //   dx = sin(heading),  dy = -cos(heading)
+        val rad  = Math.toRadians(headingDeg.toDouble())
+        val dx   =  Math.sin(rad).toFloat()
+        val dy   = -Math.cos(rad).toFloat()
 
         // Shaft start (at icon edge) and tip
-        val startX = cx + cosA * iconRadius
-        val startY = cy + sinA * iconRadius
-        val tipX   = cx + cosA * (iconRadius + arrowLen)
-        val tipY   = cy + sinA * (iconRadius + arrowLen)
+        val startX = cx + dx * iconRadius
+        val startY = cy + dy * iconRadius
+        val tipX   = cx + dx * (iconRadius + arrowLen)
+        val tipY   = cy + dy * (iconRadius + arrowLen)
 
         // Draw shaft
         canvas.drawLine(startX, startY, tipX, tipY, arrowPaint)
 
-        // Arrowhead: two wing points perpendicular to direction, behind the tip
-        val perpX = -sinA   // perpendicular unit vector
-        val perpY =  cosA
+        // Arrowhead: two wing points perpendicular to travel direction
+        val perpX = -dy   // perpendicular unit vector (rotate 90°)
+        val perpY =  dx
 
         arrowPath.reset()
         arrowPath.moveTo(tipX, tipY)
         arrowPath.lineTo(
-            tipX - cosA * headSize + perpX * headSize / 2,
-            tipY - sinA * headSize + perpY * headSize / 2
+            tipX - dx * headSize + perpX * headSize / 2,
+            tipY - dy * headSize + perpY * headSize / 2
         )
         arrowPath.lineTo(
-            tipX - cosA * headSize - perpX * headSize / 2,
-            tipY - sinA * headSize - perpY * headSize / 2
+            tipX - dx * headSize - perpX * headSize / 2,
+            tipY - dy * headSize - perpY * headSize / 2
         )
         arrowPath.close()
         canvas.drawPath(arrowPath, arrowPaint)
