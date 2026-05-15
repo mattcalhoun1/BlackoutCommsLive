@@ -114,15 +114,18 @@ class DeviceOverlay(
     }
 
     /**
-     * Draws an amber directional arrow pointing in [headingDeg] degrees (0 = north,
-     * clockwise). The shaft starts at the icon edge and extends [ARROW_LENGTH_DP] dp
-     * beyond it. A filled arrowhead sits at the tip.
+     * Draws an amber directional arrow for [headingDeg] in firmware convention:
+     *   0 = west, 90 = north, 180 = east, 270 = south
      *
-     * @param cx          screen centre X of the marker
-     * @param cy          screen centre Y of the marker
-     * @param headingDeg  compass bearing in degrees (0 = north, 90 = east)
-     * @param iconRadius  half the icon size in pixels — shaft starts here
-     * @param density     screen density multiplier
+     * Conversion to screen vector (Android Y-axis increases downward):
+     *   compassHeading = firmwareHeading - 90  (aligns firmware's 90=north with compass 0=north)
+     *   dx = sin(compassHeading),  dy = -cos(compassHeading)
+     *
+     * Verified:
+     *   firmware  0 (west)  → compass -90° → dx=-1, dy=0  ✓
+     *   firmware 90 (north) → compass   0° → dx=0,  dy=-1 ✓ (up on screen)
+     *   firmware 180 (east) → compass  90° → dx=+1, dy=0  ✓
+     *   firmware 270 (south)→ compass 180° → dx=0,  dy=+1 ✓ (down on screen)
      */
     private fun drawHeadingArrow(
         canvas: Canvas, cx: Float, cy: Float,
@@ -131,14 +134,9 @@ class DeviceOverlay(
         val arrowLen  = ARROW_LENGTH_DP * density
         val headSize  = ARROW_HEAD_DP  * density
 
-        // Compass bearing to Android screen vector:
-        //   0° north → dx=0,  dy=-1 (up)
-        //   90° east  → dx=+1, dy=0  (right)
-        //   180° south → dx=0, dy=+1 (down)
-        //   270° west  → dx=-1, dy=0  (left)
-        // Android canvas Y increases downward, so:
-        //   dx = sin(heading),  dy = -cos(heading)
-        val rad  = Math.toRadians(headingDeg.toDouble())
+        // Convert firmware heading to compass heading, then to screen vector
+        val compassDeg = headingDeg - 90.0
+        val rad  = Math.toRadians(compassDeg)
         val dx   =  Math.sin(rad).toFloat()
         val dy   = -Math.cos(rad).toFloat()
 
