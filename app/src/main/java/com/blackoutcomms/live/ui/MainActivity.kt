@@ -20,14 +20,17 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.data.ClusterRepository
+import com.blackoutcomms.live.data.MapSaveManager
 import com.blackoutcomms.live.databinding.ActivityMainBinding
 import com.blackoutcomms.live.service.BleFeedManager
 import com.blackoutcomms.live.service.ConnectionService
 import com.blackoutcomms.live.util.BlePreferences
+import com.blackoutcomms.live.util.themedAlertBuilder
 import com.blackoutcomms.live.ui.BleDevicePickerDialog
 import com.blackoutcomms.live.ui.BleScanningDialog
 import com.blackoutcomms.live.ui.WelcomeDialog
 import com.blackoutcomms.live.ui.about.AboutFragment
+import com.blackoutcomms.live.ui.help.HelpFragment
 import com.blackoutcomms.live.ui.traffic.TrafficFragment
 import com.blackoutcomms.live.ui.map.MapFragment
 
@@ -41,6 +44,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     private var manualBleFeedManager: BleFeedManager? = null
 
     private var startupDialogShown = false
+    private var notConnectedDialogShown = false
     private var connectMenuItem: MenuItem? = null
 
     companion object {
@@ -62,8 +66,8 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             // Show USB connecting dialog on startup (non-test mode)
             if (!ConnectionService.TEST_MODE && !startupDialogShown) {
                 startupDialogShown = true
-                val svc = connectionService ?: return
-                if (svc.usbState.value == ConnectionService.UsbState.CONNECTING) {
+                val svc = connectionService
+                if (svc != null && svc.usbState.value == ConnectionService.UsbState.CONNECTING) {
                     showConnectingDialog(svc)
                 }
             }
@@ -76,6 +80,14 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     BleFeedManager.BleState.NEEDS_SCAN -> startBleScanFlow()
                     else -> {}
                 }
+            }
+
+            // After a short delay, if still not connected and not actively
+            // connecting, show the "not connected" help popup once per launch.
+            if (!notConnectedDialogShown) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    maybeShowNotConnectedDialog()
+                }, 3_000)
             }
         }
 
@@ -132,6 +144,12 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                         .commit()
                     true
                 }
+                R.id.nav_help -> {
+                    supportFragmentManager.beginTransaction()
+                        .replace(R.id.fragment_container, HelpFragment())
+                        .commit()
+                    true
+                }
                 R.id.nav_about -> {
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.fragment_container, AboutFragment())
@@ -148,10 +166,9 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.toolbar_menu, menu)
         connectMenuItem = menu.findItem(R.id.action_connect)
-        // Restore Show Messages checkbox to persisted state
         menu.findItem(R.id.action_show_messages)?.isChecked = showMessages
-        // Read current state directly from the stable LiveData value so we
-        // never miss a state that fired before the menu was ready.
+        // Enable Reload Map only when a saved snapshot exists
+        menu.findItem(R.id.action_reload_map)?.isEnabled = MapSaveManager.hasSavedSnapshot(this)
         val currentState = connectionService?.bleState?.value ?: BleFeedManager.BleState.IDLE
         updateConnectIcon(currentState)
         return true
@@ -189,6 +206,44 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 activeMapViewModel()?.setShowMessages(showMessages)
                 true
             }
+            R.id.action_save_map -> {
+                val ok = MapSaveManager.save(this)
+                if (ok) {
+                    // Enable Reload Map now that a snapshot exists
+                    invalidateOptionsMenu()
+                    val savedAt = MapSaveManager.savedAt(this)
+                    val timeStr = savedAt?.let {
+                        java.text.SimpleDateFormat("MM/dd/yyyy HH:mm:ss", java.util.Locale.US)
+                            .format(java.util.Date(it))
+                    } ?: "now"
+                    Toast.makeText(this, "Map saved at $timeStr", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
+            R.id.action_reload_map -> {
+                this.themedAlertBuilder()
+                    .setTitle("Reload Map")
+                    .setMessage(
+                        MapSaveManager.savedAt(this)?.let { ms ->
+                            val timeStr = java.text.SimpleDateFormat("MM/dd/yyyy HH:mm:ss",
+                                java.util.Locale.US).format(java.util.Date(ms))
+                            "Restore the map state saved at $timeStr? Current live data will be replaced."
+                        } ?: "Restore the last saved map state?"
+                    )
+                    .setPositiveButton("Reload") { _, _ ->
+                        val ok = MapSaveManager.restore(this)
+                        Toast.makeText(
+                            this,
+                            if (ok) "Map state restored" else "Reload failed",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                true
+            }
             R.id.action_forget_ble -> {
                 BlePreferences.clear(this)
                 connectionService?.disconnect()
@@ -219,6 +274,54 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     fun cancelUsbConnect() {
         connectionService?.cancelUsbConnection()
+    }
+
+    /**
+     * Shows a one-time "not connected" help popup if the app has launched but
+     * BLE is neither connected nor in the process of connecting/scanning.
+     * Suppressed when the USB connecting spinner is already visible, and only
+     * shown once per process lifetime so it doesn't reappear on tab switches.
+     */
+    private fun maybeShowNotConnectedDialog() {
+        if (notConnectedDialogShown) return
+        val bleState = connectionService?.getCurrBleState()?.value ?: BleFeedManager.BleState.IDLE
+        val isActive = bleState == BleFeedManager.BleState.CONNECTED
+                    || bleState == BleFeedManager.BleState.CONNECTING
+                    || bleState == BleFeedManager.BleState.SCANNING
+        val spinnerShowing = supportFragmentManager
+            .findFragmentByTag(UsbConnectingDialog.TAG) != null
+            || supportFragmentManager.findFragmentByTag(BleScanningDialog.TAG) != null
+
+        android.util.Log.d("MainActivity", "maybeShowNotConnected: bleState=$bleState isActive=$isActive spinnerShowing=$spinnerShowing")
+
+        if (!isActive && !spinnerShowing) {
+            notConnectedDialogShown = true
+            showNotConnectedDialog()
+        }
+    }
+
+    private fun showNotConnectedDialog() {
+        this.themedAlertBuilder()
+            .setTitle("Not Connected")
+            .setMessage(
+                "You are not currently connected to a Blackout Comms device.\n\n" +
+                "1. Enable Bluetooth on your Blackout Comms device\n" +
+                "2. Restart your Blackout Comms device\n" +
+                "3. In this app, touch the connect button (BLE icon)\n" +
+                "4. Choose your Blackout Comms device from the list\n" +
+                "5. For pairing, use PIN shown on the Blackout Comms device"
+            )
+            .setPositiveButton("Connect Now") { _, _ -> onConnectBle() }
+            .setNeutralButton("More Info") { _, _ ->
+                startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://chatters.io")
+                    )
+                )
+            }
+            .setNegativeButton("Dismiss", null)
+            .show()
     }
 
     /** Returns the ViewModel of the currently active MapFragment, or null. */

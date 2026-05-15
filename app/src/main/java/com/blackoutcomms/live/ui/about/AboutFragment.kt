@@ -39,6 +39,11 @@ class AboutFragment : Fragment() {
         val linkHtml = "<a href=\"https://chatters.io\">Visit chatters.io</a>"
         binding.tvWebsite.text = HtmlCompat.fromHtml(linkHtml, HtmlCompat.FROM_HTML_MODE_LEGACY)
         binding.tvWebsite.movementMethod = LinkMovementMethod.getInstance()
+
+        // Show bottom image — drop about_bottom_image.png into res/drawable/ to replace
+        // the placeholder. The ImageView is always shown so the PNG appears automatically.
+        binding.imgAboutBottom.setImageResource(com.blackoutcomms.live.R.drawable.about_bottom_image)
+        binding.imgAboutBottom.visibility = android.view.View.VISIBLE
     }
 
     override fun onDestroyView() {

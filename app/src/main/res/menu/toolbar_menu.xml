@@ -16,6 +16,17 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_save_map"
+        android:title="Save Map"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_reload_map"
+        android:title="Reload Map"
+        android:enabled="false"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_forget_ble"
         android:title="Forget BLE Device"
         app:showAsAction="never" />

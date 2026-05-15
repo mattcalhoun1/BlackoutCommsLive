@@ -18,6 +18,7 @@ import org.osmdroid.events.ZoomEvent
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import java.io.File
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 class MapFragment : Fragment() {
 
@@ -125,7 +126,7 @@ class MapFragment : Fragment() {
         val current  = loadSavedTileSource()
         val checked  = sources.indexOf(current)
 
-        AlertDialog.Builder(requireContext())
+        requireContext().themedAlertBuilder()
             .setTitle("Map Tiles")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 val chosen = sources[which]
@@ -138,7 +139,7 @@ class MapFragment : Fragment() {
     }
 
     private fun showDownloadWarning() {
-        AlertDialog.Builder(requireContext())
+        requireContext().themedAlertBuilder()
             .setTitle("Large Map Download")
             .setMessage(
                 "Zooming in this far will download many map tiles for offline use. " +
@@ -162,7 +163,7 @@ class MapFragment : Fragment() {
             val options = MapViewModel.MaxAge.values()
             val labels  = options.map { it.label }.toTypedArray()
             val current = viewModel.selectedMaxAge.value ?: MapViewModel.MaxAge.ALL_TIME
-            AlertDialog.Builder(requireContext())
+            requireContext().themedAlertBuilder()
                 .setTitle("Maximum Age")
                 .setSingleChoiceItems(labels, options.indexOf(current)) { dialog, which ->
                     viewModel.setMaxAge(options[which])
@@ -176,7 +177,7 @@ class MapFragment : Fragment() {
         binding.btnDevices.setOnClickListener {
             val states = viewModel.allDeviceStates.value ?: emptyMap()
             if (states.isEmpty()) {
-                AlertDialog.Builder(requireContext())
+                requireContext().themedAlertBuilder()
                     .setMessage("No devices have been received yet.")
                     .setPositiveButton("OK", null)
                     .show()

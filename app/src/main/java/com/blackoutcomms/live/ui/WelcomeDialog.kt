@@ -9,6 +9,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.databinding.DialogWelcomeBinding
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * First-run welcome dialog.
@@ -29,7 +30,7 @@ class WelcomeDialog : DialogFragment() {
         const val TAG = "WelcomeDialog"
         private const val PREFS_NAME      = "welcome_prefs"
         private const val PREF_DONT_SHOW  = "dont_show_welcome"
-        private const val LEARN_MORE_URL  = "https://chatters.io/blackout_comms_app.html"
+        private const val LEARN_MORE_URL  = "https://chatters.io/using-blackout-comms-live"
 
         /**
          * Returns true if the dialog should be shown (first run or user hasn't
@@ -60,7 +61,7 @@ class WelcomeDialog : DialogFragment() {
         // Also persist when the dialog is cancelled (back button / outside tap)
         isCancelable = true
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setView(binding.root)
             .create()
     }

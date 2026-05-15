@@ -12,11 +12,12 @@
         android:padding="24dp"
         android:gravity="center_horizontal">
 
+        <!-- Logo — smaller than before -->
         <ImageView
             android:id="@+id/img_logo"
-            android:layout_width="160dp"
-            android:layout_height="160dp"
-            android:layout_marginBottom="24dp"
+            android:layout_width="90dp"
+            android:layout_height="90dp"
+            android:layout_marginBottom="16dp"
             android:contentDescription="Blackout Comms Live logo"
             android:scaleType="fitCenter" />
 
@@ -55,6 +56,24 @@
             android:textSize="15sp"
             android:textColor="@color/accent"
             android:layout_marginBottom="32dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Bottom image — drop about_bottom_image.png into res/drawable/ to populate.
+             The ImageView is hidden until the drawable exists. -->
+        <ImageView
+            android:id="@+id/img_about_bottom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="24dp"
+            android:contentDescription="About image"
+            android:visibility="gone" />
 
     </LinearLayout>
 </ScrollView>

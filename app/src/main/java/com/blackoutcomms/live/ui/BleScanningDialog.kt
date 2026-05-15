@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.blackoutcomms.live.R
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * Non-cancellable spinner shown for the duration of a BLE device scan.
@@ -31,7 +32,7 @@ class BleScanningDialog : DialogFragment() {
             dismissAllowingStateLoss()
         }
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setView(view)
             .setCancelable(false)
             .create()

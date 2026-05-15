@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.blackoutcomms.live.R
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * Shows a list of nearby BlackoutComms BLE devices found during a scan.
@@ -42,7 +43,7 @@ class BleDevicePickerDialog : DialogFragment() {
 
         if (names.isEmpty()) {
             // No devices found — offer to rescan
-            return AlertDialog.Builder(requireContext())
+            return requireContext().themedAlertBuilder()
                 .setTitle("No Devices Found")
                 .setMessage("No BlackoutComms devices were found nearby. Make sure the device is powered on and in range.")
                 .setPositiveButton("Scan Again") { _, _ -> onRescan?.invoke() }
@@ -50,7 +51,7 @@ class BleDevicePickerDialog : DialogFragment() {
                 .create()
         }
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setTitle("Select Device")
             .setItems(names) { _, which ->
                 onDeviceSelected?.invoke(addresses[which], names[which])

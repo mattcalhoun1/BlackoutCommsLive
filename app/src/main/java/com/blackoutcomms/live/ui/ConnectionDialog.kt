@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.blackoutcomms.live.R
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * Dialog presented when the user wants to change the connection source.
@@ -25,7 +26,7 @@ class ConnectionDialog : DialogFragment() {
 
         val options = arrayOf("USB Serial", "Bluetooth (BLE)", "Test Mode (replay files)")
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setTitle("Connect to Device")
             .setItems(options) { _, which ->
                 when (which) {

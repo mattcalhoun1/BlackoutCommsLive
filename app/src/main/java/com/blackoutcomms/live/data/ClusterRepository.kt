@@ -309,4 +309,32 @@ object ClusterRepository {
         _trafficEntries.postValue(emptyList())
         _pingEntries.postValue(emptyList())
     }
+
+    /**
+     * Restores all state from a [MapSaveManager.ClusterSnapshot].
+     * Called by MapSaveManager.restore(); replaces current state entirely.
+     */
+    fun restoreFromSnapshot(snapshot: MapSaveManager.ClusterSnapshot) {
+        // Rebuild internal maps
+        deviceMap.clear()
+        deviceMap.putAll(snapshot.devices)
+
+        graphMap.clear()
+        snapshot.graph.forEach { (fromAddr, relations) ->
+            graphMap[fromAddr] = relations.toMutableMap()
+        }
+
+        // Post all LiveData values
+        _selfDevice.postValue(snapshot.self)
+        _deviceStates.postValue(snapshot.devices.toMap())
+        _neighbors.postValue(snapshot.neighbors)
+        _graphData.postValue(
+            if (snapshot.graph.isEmpty()) null
+            else GraphPayload(snapshot.graph)
+        )
+        _messages.postValue(snapshot.messages)
+        _trafficEntries.postValue(snapshot.trafficEntries)
+        _pingEntries.postValue(snapshot.pingEntries)
+        _locationUpdates.postValue(null)
+    }
 }

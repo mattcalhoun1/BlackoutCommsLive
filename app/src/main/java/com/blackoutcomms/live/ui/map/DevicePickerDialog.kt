@@ -6,6 +6,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.activityViewModels
 import com.blackoutcomms.live.model.DeviceState
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * Multi-select dialog listing all known devices by nickname.
@@ -39,7 +40,7 @@ class DevicePickerDialog : DialogFragment() {
 
         val checked  = sorted.map { it.device.id !in hiddenIds }.toBooleanArray()
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setTitle("Visible Devices")
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 checked[which] = isChecked

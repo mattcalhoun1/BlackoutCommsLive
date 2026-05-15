@@ -10,6 +10,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.LifecycleOwner
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.service.ConnectionService
+import com.blackoutcomms.live.util.themedAlertBuilder
 
 /**
  * Modal spinner shown while the app is retrying USB serial connection.
@@ -32,7 +33,7 @@ class UsbConnectingDialog : DialogFragment() {
             dismiss()
         }
 
-        return AlertDialog.Builder(requireContext())
+        return requireContext().themedAlertBuilder()
             .setView(view)
             .setCancelable(false)
             .create()
