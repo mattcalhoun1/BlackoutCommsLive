@@ -291,10 +291,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         val spinnerShowing = supportFragmentManager
             .findFragmentByTag(UsbConnectingDialog.TAG) != null
             || supportFragmentManager.findFragmentByTag(BleScanningDialog.TAG) != null
+        // Don't stack on top of the welcome dialog on first launch
+        val welcomeShowing = supportFragmentManager
+            .findFragmentByTag(WelcomeDialog.TAG) != null
 
-        android.util.Log.d("MainActivity", "maybeShowNotConnected: bleState=$bleState isActive=$isActive spinnerShowing=$spinnerShowing")
-
-        if (!isActive && !spinnerShowing) {
+        if (!isActive && !spinnerShowing && !welcomeShowing) {
             notConnectedDialogShown = true
             showNotConnectedDialog()
         }
@@ -406,6 +407,13 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
                 != PackageManager.PERMISSION_GRANTED) {
                 needed.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
+        // POST_NOTIFICATIONS required at runtime on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
         if (needed.isNotEmpty()) {

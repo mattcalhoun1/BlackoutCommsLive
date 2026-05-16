@@ -272,6 +272,18 @@ class ConnectionService : Service() {
      * scan-and-pick flow.
      */
     fun startBle() {
+        // Guard: BLUETOOTH_CONNECT is required on Android 12+ before any BLE operation.
+        // On first launch this permission may not be granted yet when the service starts.
+        // Posting NEEDS_SCAN defers to the UI flow which only runs after the user
+        // has accepted the permission dialog.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "BLUETOOTH_CONNECT not yet granted — deferring BLE start")
+                _bleState.postValue(BleFeedManager.BleState.NEEDS_SCAN)
+                return
+            }
+        }
         val saved = BlePreferences.load(this)
         if (saved != null) {
             Log.i(TAG, "Reconnecting to saved BLE device: ${saved.address}")
