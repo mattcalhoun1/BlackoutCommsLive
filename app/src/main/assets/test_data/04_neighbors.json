@@ -1,1 +1,13 @@
-{"neighbors":{"direct":[{"id":"abc123","ts":"2026-05-11 13:54:10","rssi":-55,"battery":"medium","temperature":71.2,"relayState":"off"},{"id":"abc125","ts":"2026-05-11 13:53:10","rssi":-72,"battery":"high","relayState":"on"}],"indirect":[{"id":"abc126","ts":"2026-05-11 13:52:40","rssi":-88,"battery":"low"},{"id":"abc127","ts":"2026-05-11 13:51:10","rssi":-90,"battery":"high"},{"id":"abc128","ts":"2026-05-11 13:50:10","rssi":-81,"battery":"medium"}]}}
+{"neighbors":{
+  "direct":[
+    {"id":"NV002","ts":"260513155858","rssi":-52,"battery":"high",  "temperature":"27.1","relayState":"off"},
+    {"id":"NV008","ts":"260513155855","rssi":-61,"battery":"medium","relayState":"on"},
+    {"id":"NV004","ts":"260513155840","rssi":-71,"battery":"high",  "temperature":"31.2"}
+  ],
+  "indirect":[
+    {"id":"NV003","ts":"260513155848","rssi":-83,"battery":"high"},
+    {"id":"NV006","ts":"260513155805","rssi":-88,"battery":"medium"},
+    {"id":"NV009","ts":"260513155812","rssi":-79,"battery":"low","relayState":"on"},
+    {"id":"NV011","ts":"260513155850","rssi":-92,"battery":"medium","temperature":"29.5"}
+  ]
+}}

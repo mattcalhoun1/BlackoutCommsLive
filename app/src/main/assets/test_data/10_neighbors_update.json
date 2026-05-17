@@ -1,0 +1,12 @@
+{"neighbors":{
+  "direct":[
+    {"id":"NV002","ts":"260513155922","rssi":-49,"battery":"high","temperature":"27.3","relayState":"off"},
+    {"id":"NV008","ts":"260513155920","rssi":-58,"battery":"medium","relayState":"on"},
+    {"id":"NV004","ts":"260513155918","rssi":-68,"battery":"high","temperature":"31.5"}
+  ],
+  "indirect":[
+    {"id":"NV003","ts":"260513155916","rssi":-81,"battery":"high"},
+    {"id":"NV010","ts":"260513155914","rssi":-85,"battery":"medium","relayState":"on"},
+    {"id":"NV012","ts":"260513155912","rssi":-90,"battery":"medium"}
+  ]
+}}

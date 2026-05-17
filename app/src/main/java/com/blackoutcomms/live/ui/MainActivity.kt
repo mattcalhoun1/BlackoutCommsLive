@@ -1,6 +1,7 @@
 package com.blackoutcomms.live.ui
 
 import android.Manifest
+import android.util.Log
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -27,6 +28,8 @@ import com.blackoutcomms.live.service.ConnectionService
 import com.blackoutcomms.live.util.BlePreferences
 import com.blackoutcomms.live.util.themedAlertBuilder
 import com.blackoutcomms.live.ui.BleDevicePickerDialog
+import com.blackoutcomms.live.ui.BleDownloadDialog
+import com.blackoutcomms.live.ui.BlePinDialog
 import com.blackoutcomms.live.ui.BleScanningDialog
 import com.blackoutcomms.live.ui.WelcomeDialog
 import com.blackoutcomms.live.ui.about.AboutFragment
@@ -45,6 +48,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     private var startupDialogShown = false
     private var notConnectedDialogShown = false
+    private var checkNotConnectedOnResume = false
+    // Pending credentials held until PIN is verified by incoming data
+    private var pendingBleAddress: String? = null
+    private var pendingBleName: String? = null
+    private var pendingBlePin: String? = null
     private var connectMenuItem: MenuItem? = null
 
     companion object {
@@ -82,13 +90,42 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 }
             }
 
-            // After a short delay, if still not connected and not actively
-            // connecting, show the "not connected" help popup once per launch.
-            if (!notConnectedDialogShown) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    maybeShowNotConnectedDialog()
-                }, 3_000)
+            // Observe PIN verification state to save credentials or re-prompt
+            connectionService?.pinState?.observe(this@MainActivity) { pinState ->
+                when (pinState) {
+                    ConnectionService.PinVerificationState.VERIFIED -> {
+                        // Data received — PIN was correct, persist credentials
+                        val addr = pendingBleAddress
+                        val name = pendingBleName
+                        if (addr != null && name != null) {
+                            BlePreferences.save(this@MainActivity, addr, name, pendingBlePin)
+                            Log.i("MainActivity", "PIN verified — saved credentials for $name")
+                        }
+                        clearPendingCredentials()
+                        // Show download spinner — dismissed when self message arrives
+                        showBleDownloadDialog()
+                    }
+                    ConnectionService.PinVerificationState.FAILED -> {
+                        // No data in 5s or disconnected — PIN wrong, start a fresh scan
+                        clearPendingCredentials()
+                        runOnUiThread {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Incorrect PIN or no response — please select a device and try again",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            startBleScanFlow()
+                        }
+                    }
+                    else -> {}
+                }
             }
+
+            // Set flag to check connection status on next onResume.
+            // We don't use postDelayed here because the activity window may not
+            // be in the foreground (permission dialog may be showing), which causes
+            // BadTokenException when trying to show an AlertDialog.
+            checkNotConnectedOnResume = true
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -162,6 +199,19 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     // ── Toolbar icon tinting ──────────────────────────────────────────────────
+
+    override fun onResume() {
+        super.onResume()
+        if (checkNotConnectedOnResume && !notConnectedDialogShown) {
+            // Delay slightly so the activity's window is fully attached and
+            // any in-progress fragment transactions from onCreate have settled
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!isFinishing && !isDestroyed && !notConnectedDialogShown) {
+                    maybeShowNotConnectedDialog()
+                }
+            }, 1_000)
+        }
+    }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.toolbar_menu, menu)
@@ -284,7 +334,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
      */
     private fun maybeShowNotConnectedDialog() {
         if (notConnectedDialogShown) return
+        if (isFinishing || isDestroyed) return
+        // Guard: activity must be resumed (foreground) with a valid window token
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         val bleState = connectionService?.getCurrBleState()?.value ?: BleFeedManager.BleState.IDLE
+        // NEEDS_SCAN means "not connected, please scan" — don't treat as active
         val isActive = bleState == BleFeedManager.BleState.CONNECTED
                     || bleState == BleFeedManager.BleState.CONNECTING
                     || bleState == BleFeedManager.BleState.SCANNING
@@ -376,12 +430,48 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
         val dialog = BleDevicePickerDialog.newInstance(names, addresses)
         dialog.onDeviceSelected = { address, name ->
-            // Save for future auto-reconnect; bonding PIN handled by Android OS
-            BlePreferences.save(this, address, name)
-            connectionService?.connectBleWithPin(address)
+            // After device selection, prompt for application-level PIN
+            showBlePinPrompt(address, name)
         }
         dialog.onRescan = { startBleScanFlow() }
         dialog.show(supportFragmentManager, BleDevicePickerDialog.TAG)
+    }
+
+    private fun showBlePinPrompt(address: String, name: String) {
+        val dialog = BlePinDialog.newInstance(name)
+        dialog.onResult = { pin ->
+            // Hold credentials pending — only persist after data confirms PIN is correct
+            pendingBleAddress = address
+            pendingBleName    = name
+            pendingBlePin     = pin
+            connectionService?.connectBleWithPin(address, pin = pin)
+            Toast.makeText(
+                this,
+                if (pin != null) "Connecting to $name with PIN…"
+                else "Connecting to $name…",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        dialog.show(supportFragmentManager, BlePinDialog.TAG)
+    }
+
+    private fun clearPendingCredentials() {
+        pendingBleAddress = null
+        pendingBleName    = null
+        pendingBlePin     = null
+    }
+
+    private fun showBleDownloadDialog() {
+        // Don't stack if already showing
+        if (supportFragmentManager.findFragmentByTag(BleDownloadDialog.TAG) != null) return
+        val dialog = BleDownloadDialog()
+        dialog.onCancelled = {
+            connectionService?.disconnect()
+        }
+        dialog.show(supportFragmentManager, BleDownloadDialog.TAG)
+        supportFragmentManager.executePendingTransactions()
+        (supportFragmentManager.findFragmentByTag(BleDownloadDialog.TAG) as? BleDownloadDialog)
+            ?.observeSelf(this)
     }
 
     override fun onConnectTest() {

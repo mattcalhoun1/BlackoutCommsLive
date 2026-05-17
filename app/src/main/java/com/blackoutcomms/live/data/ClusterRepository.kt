@@ -20,6 +20,13 @@ object ClusterRepository {
         .registerTypeAdapter(Neighbors::class.java, NeighborsDeserializer())
         .create()
 
+    /**
+     * Optional callback invoked each time any valid payload is ingested.
+     * Used by ConnectionService to detect the first data arriving after a
+     * PIN exchange, triggering PIN verification and credential storage.
+     */
+    var onDataIngested: (() -> Unit)? = null
+
     // ── Observable state ─────────────────────────────────────────────────────
 
     private val _selfDevice = MutableLiveData<SelfDevice?>()
@@ -62,9 +69,13 @@ object ClusterRepository {
     // ── Ingestion ─────────────────────────────────────────────────────────────
 
     fun ingest(raw: String) {
+        // Notify listener on successful ingestion (used for PIN verification)
+        if (raw.isNotEmpty())
+            onDataIngested?.invoke()
+
         try {
             val json = JsonParser.parseString(raw.trim()).asJsonObject
-            Log.w("json", "JSON Keys: ${json.keySet()}")
+            Log.d("json", "JSON Keys: ${json.keySet()}")
             when {
                 json.has("self")      -> processSelf(json)
                 json.has("devices")   -> processDevices(json)

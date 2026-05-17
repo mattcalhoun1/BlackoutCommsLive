@@ -236,6 +236,15 @@ class MapFragment : Fragment() {
             binding.tvCluster.text = if (!self.cluster.isNullOrBlank())
                 "Cluster: ${self.cluster}" else "Cluster: loading..."
 
+            // Show self device name on second line once known
+            val selfDisplay = self.name.takeIf { it.isNotBlank() }
+            if (selfDisplay != null) {
+                binding.tvSelfName.text = selfDisplay
+                binding.tvSelfName.visibility = View.VISIBLE
+            } else {
+                binding.tvSelfName.visibility = View.GONE
+            }
+
             if (deviceOverlay == null) {
                 deviceOverlay = DeviceOverlay(requireContext(), self.id) { state ->
                     showDeviceDetail(state)

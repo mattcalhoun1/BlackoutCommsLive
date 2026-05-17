@@ -134,7 +134,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
             .with { _, data -> onDataReceived(data) }
 
         // MTU negotiation — .fail() prevents queue stall if firmware rejects
-        requestMtu(512)
+        requestMtu(247)
             .with   { _, mtu    -> Log.i(TAG, "MTU negotiated: $mtu bytes") }
             .fail   { _, status -> Log.w(TAG, "MTU rejected (status $status), using default") }
             .enqueue()
@@ -169,6 +169,13 @@ class BleFeedManager(context: Context) : BleManager(context) {
     private fun onDataReceived(data: Data) {
         //Log.w("ble", "BLE data received ${data.size()} ${data.getStringValue(0)}")
         val chunk = data.getStringValue(0) ?: return
+
+        // if this was a pin accepted message, bypass the normal json processing
+        // to notify the pin is good
+        if (chunk.equals("success\n")) {
+            ClusterRepository.ingest(chunk)
+        }
+
         lineBuffer.append(chunk)
         // keep accepting messages until carriage return is received
         var idx: Int
@@ -256,7 +263,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
             scanner.stopScan(callback)
             activeScanCallback = null
             if (_bleState.value == BleState.SCANNING) _bleState.postValue(BleState.IDLE)
-            Log.i(TAG, "Scan complete, found ${'$'}{found.size} device(s)")
+            Log.i(TAG, "Scan complete, found ${found.size} device(s)")
             onResults(found.values.toList())
         }, durationMs)
 
@@ -325,45 +332,19 @@ class BleFeedManager(context: Context) : BleManager(context) {
         }
         Log.i(TAG, "connectDevice: ${device.address}, bondState=$bondDesc, autoConnect=$autoConnect")
 
-        if (bondState == BluetoothDevice.BOND_NONE) {
-            Log.i(TAG, "Device not bonded — initiating bond before GATT connect")
-            bondThenConnect(device, autoConnect)
-        } else {
-            // Already bonded (or bonding in progress) — connect directly
-            doConnect(device, autoConnect)
-        }
-    }
-
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    private fun bondThenConnect(device: BluetoothDevice, autoConnect: Boolean) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                val d     = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
-                if (d?.address != device.address) return
-
-                when (state) {
-                    BluetoothDevice.BOND_BONDED -> {
-                        Log.i(TAG, "Bond established — proceeding with GATT connect")
-                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                        reconnectHandler.post { doConnect(device, autoConnect) }
-                    }
-                    BluetoothDevice.BOND_NONE -> {
-                        Log.w(TAG, "Bonding failed or was rejected")
-                        try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                        _bleState.postValue(BleState.DISCONNECTED)
-                    }
-                }
-            }
-        }
-        context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
-
-        val started = device.createBond()
-        if (!started) {
-            Log.e(TAG, "createBond() returned false — trying GATT connect anyway")
-            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
-            doConnect(device, autoConnect)
-        }
+        // Always attempt GATT connection directly regardless of bond state.
+        //
+        // Rationale: we don't know upfront whether the firmware requires bonding.
+        //   - If no bonding required (BOND_NONE): doConnect() works immediately.
+        //   - If bonding required (BOND_NONE):     firmware returns GATT_INSUF_AUTHENTICATION
+        //     during enableNotifications(); the OS then initiates bonding automatically
+        //     via the standard pairing dialog. Nordic's queue resumes after bonding.
+        //   - If already bonded (BOND_BONDED):     doConnect() works immediately.
+        //
+        // Previously we called createBond() proactively, which caused the OS to send
+        // a pairing request even when the firmware doesn't require it — resulting in
+        // the firmware rejecting the bond and the connection never being established.
+        doConnect(device, autoConnect)
     }
 
     private fun doConnect(device: BluetoothDevice, autoConnect: Boolean) {
@@ -494,6 +475,26 @@ class BleFeedManager(context: Context) : BleManager(context) {
         return name?.takeIf { it.isNotBlank() }
             ?: localName?.takeIf { it.isNotBlank() }
             ?: result.device.address
+    }
+
+    // ── Application-level PIN ────────────────────────────────────────────────
+
+    /**
+     * Send an application-level PIN to the firmware via the TX characteristic.
+     * Called after GATT is fully ready (onDeviceReady) if a PIN was saved.
+     * Format: "PIN:<pin>\n" — adjust if firmware expects a different format.
+     */
+    fun sendPin(pin: String) {
+        if (pin.isBlank()) return
+        val tx = txCharacteristic ?: run {
+            Log.w(TAG, "TX characteristic not available — cannot send PIN")
+            return
+        }
+        writeCharacteristic(tx, "PIN:$pin".toByteArray(Charsets.UTF_8),
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+            .done { Log.i(TAG, "PIN $pin sent successfully") }
+            .fail { _, status -> Log.e(TAG, "PIN send failed, status=$status") }
+            .enqueue()
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

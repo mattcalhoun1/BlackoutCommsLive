@@ -47,6 +47,7 @@ app/src/main/
 - Android Studio Hedgehog (2023.1.1) or newer
 - Android SDK 34
 - Kotlin 1.9+
+- For running with live hardware, you need a [Blackout Comms](https://chatters.io) communicator with BLE enabled
 
 ### Build & Run
 
@@ -55,7 +56,7 @@ app/src/main/
 3. Sync Gradle (`File → Sync Project with Gradle Files`).
 4. Run on device or emulator (`Run → Run 'app'`).
 
-The app starts in **test mode** (`TEST_MODE = true` in `ConnectionService.kt`),
+The app can start in **test mode** (`TEST_MODE = true` in `ConnectionService.kt`),
 which replays `assets/test_data/*.json` in alphabetical order, simulating a
 live feed.
 
@@ -63,29 +64,10 @@ live feed.
 
 ## Switching to Live Hardware
 
-1. Open `ConnectionService.kt` and set:
+Open `ConnectionService.kt` and set:
    ```kotlin
    const val TEST_MODE = false
    ```
-2. To use **USB serial**: plug in the Blackout Comms device and tap the
-   "Connect USB" option (or send `ACTION_CONNECT_USB` intent).
-3. To use **BLE**: implement `connectBle()` using the Nordic BLE library stub
-   already in `ConnectionService`. Call `ClusterRepository.ingest(line)` for
-   each newline-delimited JSON string received.
-
----
-
-## Replacing Placeholder Icons
-
-All icons in `res/drawable/` are vector placeholders that match the icon shape
-intent. To use the official Blackout Comms graphics:
-
-1. Download each PNG from the URLs listed in the spec document (e.g.
-   `https://www.offgridcomms.club/graphics/device_nonroot.png`).
-2. Place each file in `res/drawable/` using the filename expected by
-   `IconResolver.kt` (e.g. `device_nonroot.png`).
-3. Update `IconResolver.kt` to return the PNG resource ID if the vector is to
-   be replaced entirely, or use Glide for remote loading.
 
 ---
 

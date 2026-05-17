@@ -7,8 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.usb.UsbManager
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -75,7 +77,15 @@ class ConnectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIF_ID, buildNotification("Blackout Comms Live running"))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIF_ID,
+                buildNotification("Blackout Comms Live running"),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        } else {
+            startForeground(NOTIF_ID, buildNotification("Blackout Comms Live running"))
+        }
         if (TEST_MODE) {
             startTestMode()
         } else {
@@ -266,6 +276,13 @@ class ConnectionService : Service() {
     private val _bleState = MutableLiveData(BleFeedManager.BleState.IDLE)
     val bleState: LiveData<BleFeedManager.BleState> = _bleState
 
+    enum class PinVerificationState { IDLE, PENDING, VERIFIED, FAILED }
+    private val _pinState = MutableLiveData(PinVerificationState.IDLE)
+    val pinState: LiveData<PinVerificationState> = _pinState
+
+    private val pinTimeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pinTimeoutRunnable: Runnable? = null
+
     /**
      * If a BLE device has been saved previously, connect directly to it (with
      * saved PIN if any). Otherwise post NEEDS_SCAN so the UI can start the
@@ -276,7 +293,7 @@ class ConnectionService : Service() {
         // On first launch this permission may not be granted yet when the service starts.
         // Posting NEEDS_SCAN defers to the UI flow which only runs after the user
         // has accepted the permission dialog.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
                     != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 Log.w(TAG, "BLUETOOTH_CONNECT not yet granted — deferring BLE start")
@@ -286,8 +303,8 @@ class ConnectionService : Service() {
         }
         val saved = BlePreferences.load(this)
         if (saved != null) {
-            Log.i(TAG, "Reconnecting to saved BLE device: ${saved.address}")
-            connectBleWithPin(saved.address, autoConnect = true)
+            Log.i(TAG, "Reconnecting to saved BLE device: ${saved.address}, hasPin=${saved.pin != null}")
+            connectBleWithPin(saved.address, pin = saved.pin, autoConnect = true)
         } else {
             // Signal UI to show the device picker flow
             _bleState.postValue(BleFeedManager.BleState.NEEDS_SCAN)
@@ -302,13 +319,81 @@ class ConnectionService : Service() {
      * whenever the device comes into range, even after app restarts.
      */
     fun connectBleWithPin(address: String, pin: String? = null, autoConnect: Boolean = false) {
-        bleFeedManager?.closeBle()
+        cancelPinTimeout()
+        _pinState.postValue(PinVerificationState.IDLE)
+
+        // Register the data-received callback IMMEDIATELY and SYNCHRONOUSLY before
+        // any async BLE operations begin. onDataReceived runs on the BLE callback
+        // thread which can fire at any time after the GATT connection is established.
+        // Registering inside Handler.post or inside the bleState observer is too late
+        // because the BLE thread does not wait for the main thread handler queue.
+        if (!pin.isNullOrBlank()) {
+            ClusterRepository.onDataIngested = {
+                onDataReceivedAfterPin()
+                ClusterRepository.onDataIngested = null  // one-shot
+            }
+            Log.i(TAG, "onDataIngested registered synchronously before BLE connect")
+        }
+
+        bleFeedManager?.close()
         bleFeedManager = BleFeedManager(this).also { mgr ->
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                mgr.bleState.observeForever { state -> _bleState.postValue(state) }
+                mgr.bleState.observeForever { state ->
+                    _bleState.postValue(state)
+                    when (state) {
+                        BleFeedManager.BleState.CONNECTED -> {
+                            if (!pin.isNullOrBlank()) {
+                                Log.i(TAG, "GATT ready — sending application PIN")
+                                startPinTimeout()
+                                mgr.sendPin(pin)
+                            }
+                        }
+                        BleFeedManager.BleState.DISCONNECTED -> {
+                            if (_pinState.value == PinVerificationState.PENDING) {
+                                Log.w(TAG, "Disconnected during PIN verification — PIN likely wrong")
+                                cancelPinTimeout()
+                                _pinState.postValue(PinVerificationState.FAILED)
+                            }
+                        }
+                        else -> {}
+                    }
+                }
             }
             mgr.connectByAddress(address, autoConnect = autoConnect)
         }
+    }
+
+    /**
+     * Called by the data ingestion path when the first bytes arrive after a
+     * PIN exchange. Cancels the timeout and marks PIN as verified.
+     */
+    fun onDataReceivedAfterPin() {
+        if (_pinState.value == PinVerificationState.PENDING) {
+            Log.i(TAG, "Data received — PIN verified")
+            cancelPinTimeout()
+            _pinState.postValue(PinVerificationState.VERIFIED)
+        }
+    }
+
+    private fun startPinTimeout() {
+        cancelPinTimeout()
+        _pinState.postValue(PinVerificationState.PENDING)
+        pinTimeoutRunnable = Runnable {
+            if (_pinState.value == PinVerificationState.PENDING) {
+                Log.w(TAG, "PIN verification timeout — no data received in 5s")
+                _pinState.postValue(PinVerificationState.FAILED)
+            }
+        }.also { pinTimeoutHandler.postDelayed(it, 5_000L) }
+    }
+
+    private fun cancelPinTimeout() {
+        pinTimeoutRunnable?.let { pinTimeoutHandler.removeCallbacks(it) }
+        pinTimeoutRunnable = null
+
+    }
+
+    private fun clearPinCallback() {
+        ClusterRepository.onDataIngested = null
     }
 
     /**
@@ -338,6 +423,9 @@ class ConnectionService : Service() {
     // ── Disconnect ────────────────────────────────────────────────────────────
 
     fun disconnect() {
+        cancelPinTimeout()
+        clearPinCallback()
+        _pinState.postValue(PinVerificationState.IDLE)
         usbIoManager?.stop()
         usbIoManager = null
         try { activeUsbPort?.close() } catch (_: Exception) {}

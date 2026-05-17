@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.*
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.blackoutcomms.live.R
@@ -20,7 +21,12 @@ class TrafficFragment : Fragment() {
 
     private var _binding: FragmentTrafficBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: TrafficViewModel by viewModels()
+    // Use activityViewModels() so the ViewModel is scoped to the Activity
+    // rather than the Fragment. When the user switches tabs, replace()
+    // destroys and recreates TrafficFragment — a fragment-scoped ViewModel
+    // would be recreated too, and the chart would fail to render on first
+    // invalidate() because its dimensions are still zero.
+    private val viewModel: TrafficViewModel by activityViewModels()
     private lateinit var pingAdapter: PingAdapter
 
     override fun onCreateView(
@@ -183,7 +189,11 @@ class TrafficFragment : Fragment() {
 
     private fun setupObservers() {
         viewModel.trafficEntries.observe(viewLifecycleOwner) { entries ->
-            updateChart(entries)
+            // Defer chart update to next layout pass. MPAndroidChart silently
+            // does nothing if the chart view dimensions are still zero when
+            // data is set — which happens on the initial emission right after
+            // the fragment view is created (before first layout pass).
+            binding.chart.post { updateChart(entries) }
         }
 
         viewModel.pingEntries.observe(viewLifecycleOwner) { pings ->
