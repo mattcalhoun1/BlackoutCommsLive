@@ -58,10 +58,15 @@
         </activity>
 
         <!-- Connection service -->
+        <!-- stopWithTask="false" ensures onTaskRemoved() is called when the user
+             swipes the app away, rather than the service being silently killed.
+             This allows the service to cleanly disconnect BLE/USB and stop itself. -->
         <service
             android:name=".service.ConnectionService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:stopWithTask="false"
+            android:foregroundServiceType="connectedDevice"
+            android:permission="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     </application>
 

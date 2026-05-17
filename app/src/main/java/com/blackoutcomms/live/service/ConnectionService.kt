@@ -103,13 +103,30 @@ class ConnectionService : Service() {
             ACTION_CONNECT_BLE -> { /* initiated via activity binding */ }
             ACTION_DISCONNECT  -> cancelUsbConnection()
         }
-        return START_STICKY
+        // START_NOT_STICKY: do not restart the service if it is stopped
+        // (e.g. after onTaskRemoved). START_STICKY would cause Android to
+        // recreate it after a swipe-close, defeating onTaskRemoved.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         disconnect()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Called when the user swipes the app away from the recents list.
+     * Stops the service cleanly so BLE, the Bluetooth radio, and the
+     * foreground notification are all released — preventing battery drain
+     * after the user has explicitly closed the app.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "App swiped away — stopping service")
+        disconnect()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     // ── Test Mode ─────────────────────────────────────────────────────────────
