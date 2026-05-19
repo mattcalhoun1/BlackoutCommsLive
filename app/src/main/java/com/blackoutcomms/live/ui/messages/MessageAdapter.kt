@@ -21,6 +21,7 @@ class MessageAdapter(
 
     private var deviceStates: Map<String, DeviceState> = emptyMap()
     private var selfId: String = ""
+    private var bleConnected: Boolean = false
 
     fun updateDeviceStates(states: Map<String, DeviceState>) {
         deviceStates = states
@@ -29,6 +30,11 @@ class MessageAdapter(
 
     fun updateSelfId(id: String) {
         selfId = id
+        notifyDataSetChanged()
+    }
+
+    fun updateBleConnected(connected: Boolean) {
+        bleConnected = connected
         notifyDataSetChanged()
     }
 
@@ -138,10 +144,12 @@ class MessageAdapter(
             tvStatus.text   = msg.status.uppercase()
             tvDelivery.text = msg.delivery.uppercase()
 
-            // ── Reply button — shown only when this device is the recipient ───
+            // ── Reply button — shown when self is recipient, enabled only when connected
             if (msg.recipient == selfId && selfId.isNotBlank()) {
                 btnReply.visibility = android.view.View.VISIBLE
-                btnReply.setOnClickListener { onReply(msg.sender) }
+                btnReply.isEnabled  = bleConnected
+                btnReply.alpha      = if (bleConnected) 1.0f else 0.4f
+                btnReply.setOnClickListener { if (bleConnected) onReply(msg.sender) }
             } else {
                 btnReply.visibility = android.view.View.GONE
             }

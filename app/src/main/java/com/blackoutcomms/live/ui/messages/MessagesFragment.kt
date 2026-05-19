@@ -7,6 +7,7 @@ import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.blackoutcomms.live.service.BleFeedManager
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.util.IconResolver
 import com.blackoutcomms.live.ui.MainActivity
@@ -27,6 +28,7 @@ class MessagesFragment : Fragment() {
     private val spinnerLabels = mutableListOf<String>()
     private val spinnerIcons  = mutableListOf<Int>()   // drawable res per entry
     private var spinnerUpdating = false   // guard against feedback loops
+    private var bleConnected = false      // tracks BLE state for button enable/disable
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -66,6 +68,11 @@ class MessagesFragment : Fragment() {
 
         binding.btnSendDm.setOnClickListener { showSendDialog(isBroadcast = false) }
         binding.btnSendBroadcast.setOnClickListener { showSendDialog(isBroadcast = true) }
+    }
+
+    private fun updateSendButtonsEnabled() {
+        binding.btnSendDm.isEnabled        = bleConnected
+        binding.btnSendBroadcast.isEnabled = bleConnected
     }
 
     private fun showSendDialog(isBroadcast: Boolean, preselectedDeviceId: String? = null) {
@@ -122,6 +129,14 @@ class MessagesFragment : Fragment() {
 
         com.blackoutcomms.live.data.ClusterRepository.selfDevice.observe(viewLifecycleOwner) { self ->
             if (self != null) messageAdapter.updateSelfId(self.id)
+        }
+
+        // Observe BLE state — enable/disable send buttons and Reply buttons
+        val activity = requireActivity() as? MainActivity
+        activity?.connectionService?.getCurrBleState()?.observe(viewLifecycleOwner) { state ->
+            bleConnected = state == BleFeedManager.BleState.CONNECTED
+            updateSendButtonsEnabled()
+            messageAdapter.updateBleConnected(bleConnected)
         }
     }
 
