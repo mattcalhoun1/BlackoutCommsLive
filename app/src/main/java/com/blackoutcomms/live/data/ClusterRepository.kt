@@ -382,6 +382,16 @@ object ClusterRepository {
         return deviceMap.values.firstOrNull { normaliseAddress(it.device.address) == target }
     }
 
+    /**
+     * Clears the live message map and posts an empty list to _messages.
+     * Called when the user dismisses the map message panel so dismissed
+     * messages don't reappear when new data arrives.
+     */
+    fun clearLiveMessages() {
+        liveMessageMap.clear()
+        _messages.postValue(emptyList())
+    }
+
     fun reset() {
         deviceMap.clear()
         graphMap.clear()

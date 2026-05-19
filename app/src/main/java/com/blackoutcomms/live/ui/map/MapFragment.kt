@@ -240,8 +240,10 @@ class MapFragment : Fragment() {
             binding.mapView.invalidate()
         }
 
-        // Dismiss messages
+        // Dismiss messages — also clear liveMessageMap so dismissed messages
+        // don't reappear when the next BLE data packet triggers a re-emission
         binding.btnDismissMessages.setOnClickListener {
+            com.blackoutcomms.live.data.ClusterRepository.clearLiveMessages()
             binding.messagePanel.visibility = View.GONE
             binding.bottomFilterBar.visibility = View.VISIBLE
         }
