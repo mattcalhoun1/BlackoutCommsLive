@@ -1,5 +1,8 @@
 package com.blackoutcomms.live.ui
 
+import android.graphics.drawable.AnimationDrawable
+import android.graphics.drawable.Animatable
+import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat
 import android.Manifest
 import android.provider.Settings
 import android.util.Log
@@ -34,6 +37,7 @@ import com.blackoutcomms.live.ui.BlePinDialog
 import com.blackoutcomms.live.ui.BleScanningDialog
 import com.blackoutcomms.live.ui.WelcomeDialog
 import com.blackoutcomms.live.ui.about.AboutFragment
+import com.blackoutcomms.live.ui.messages.MessagesFragment
 import com.blackoutcomms.live.ui.help.HelpFragment
 import com.blackoutcomms.live.ui.traffic.TrafficFragment
 import com.blackoutcomms.live.ui.map.MapFragment
@@ -41,7 +45,7 @@ import com.blackoutcomms.live.ui.map.MapFragment
 class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     private lateinit var binding: ActivityMainBinding
-    private var connectionService: ConnectionService? = null
+    var connectionService: ConnectionService? = null
 
     // Kept only for manual BLE invocations from ConnectionDialog;
     // startup BLE is owned by ConnectionService
@@ -50,6 +54,9 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     private var startupDialogShown = false
     private var notConnectedDialogShown = false
     private var checkNotConnectedOnResume = false
+    private val dataActivityHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val stopActivityRunnable = Runnable { stopDataActivityIcon() }
+    private var dataActivityShowing = false
     // Pending credentials held until PIN is verified by incoming data
     private var pendingBleAddress: String? = null
     private var pendingBleName: String? = null
@@ -95,6 +102,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     }
                     else -> {}
                 }
+            }
+
+            // Observe data activity pulses — show spinner on toolbar for 2 s
+            ClusterRepository.dataActivity.observe(this@MainActivity) {
+                showDataActivityIcon()
             }
 
             // Observe PIN verification state to save credentials or re-prompt
@@ -182,6 +194,12 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     activeMapViewModel()?.setShowMessages(showMessages)
                     true
                 }
+                R.id.nav_messages -> {
+                    supportFragmentManager.beginTransaction()
+                        .replace(R.id.fragment_container, MessagesFragment())
+                        .commit()
+                    true
+                }
                 R.id.nav_traffic -> {
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.fragment_container, TrafficFragment())
@@ -245,6 +263,34 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             icon.clearColorFilter()
             icon.setColorFilter(COLOR_BLE_DEFAULT, PorterDuff.Mode.SRC_IN)
         }
+    }
+
+    /**
+     * Swaps the toolbar BLE icon for a data-activity icon for 0.5 seconds.
+     * Each call restarts the timer (debounce), so rapid data keeps the
+     * spinner showing continuously without flickering.
+     * The menu item is disabled while the spinner is showing so it cannot
+     * be tapped accidentally during data reception.
+     */
+    private fun showDataActivityIcon() {
+        dataActivityHandler.removeCallbacks(stopActivityRunnable)
+        if (!dataActivityShowing) {
+            dataActivityShowing = true
+            connectMenuItem?.setIcon(R.drawable.ic_data_activity)
+            // Gray tint so it visually distinguishes from the normal (blue/white) BLE icon
+            connectMenuItem?.icon?.setColorFilter(
+                android.graphics.Color.parseColor("#888888"), PorterDuff.Mode.SRC_IN)
+            connectMenuItem?.isEnabled = false
+        }
+        dataActivityHandler.postDelayed(stopActivityRunnable, 500)
+    }
+
+    private fun stopDataActivityIcon() {
+        dataActivityShowing = false
+        connectMenuItem?.isEnabled = true
+        connectMenuItem?.setIcon(R.drawable.ic_connect)
+        val state = connectionService?.getCurrBleState()?.value ?: BleFeedManager.BleState.IDLE
+        updateConnectIcon(state)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

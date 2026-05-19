@@ -27,6 +27,15 @@ object ClusterRepository {
      */
     var onDataIngested: (() -> Unit)? = null
 
+    /**
+     * Pulses true each time any valid JSON payload is successfully ingested.
+     * Observed by MainActivity to show the data-activity spinner on the toolbar.
+     * The value toggles so that repeated emissions are always distinct.
+     */
+    private val _dataActivity = MutableLiveData(false)
+    val dataActivity: LiveData<Boolean> = _dataActivity
+    private var _activityToggle = false
+
     // ── Observable state ─────────────────────────────────────────────────────
 
     private val _selfDevice = MutableLiveData<SelfDevice?>()
@@ -46,6 +55,14 @@ object ClusterRepository {
 
     private val _messages = MutableLiveData<List<Message>>(emptyList())
     val messages: LiveData<List<Message>> = _messages
+
+    // Saved/historical messages upserted by id — keyed by message id, newest first
+    // Both maps keyed by "id|recipient" composite key so messages with the same
+    // id but different recipients are stored independently.
+    internal val liveMessageMap   = mutableMapOf<String, Message>()
+    internal val savedMessageMap  = mutableMapOf<String, Message>()
+    private val _savedMessages = MutableLiveData<List<Message>>(emptyList())
+    val savedMessages: LiveData<List<Message>> = _savedMessages
 
     // Pulses whenever a location payload arrives — used by the status line
     // Holds the timestamp of the most recent location update
@@ -84,8 +101,15 @@ object ClusterRepository {
                 json.has("graph")     -> processGraph(json)
                 json.has("sender")    -> processMessage(json)
                 json.has("message")   -> processMessage(json)
-                json.has("traffic")   -> processTraffic(json)
+                json.has("traffic")       -> processTraffic(json)
+                json.has("messageStatus") -> processMessageStatus(json)
             }
+            // Notify listener on successful ingestion (used for PIN verification)
+            onDataIngested?.invoke()
+
+            // Pulse the data-activity LiveData so the toolbar can show a spinner
+            _activityToggle = !_activityToggle
+            _dataActivity.postValue(_activityToggle)
         } catch (e: Exception) {
             // Malformed JSON — ignore
         }
@@ -262,19 +286,69 @@ object ClusterRepository {
         _graphData.postValue(GraphPayload(graphMap.toMap().mapValues { it.value.toMap() }))
     }
 
+    private fun messageKey(msg: Message): String {
+        val id = msg.id ?: "${msg.sender}_${msg.ts}"
+        return "$id|${msg.recipient}"
+    }
+
     private fun processMessage(json: JsonObject) {
         try {
-            // Try wrapping in "message" if needed
-            val wrapper = if (json.has("message")) {
-                gson.fromJson(json.get("message"), Message::class.java)
+            val msgJson = if (json.has("message")) json.getAsJsonObject("message") else json
+            val msg = gson.fromJson(msgJson, Message::class.java)
+            val key = messageKey(msg)
+
+            if (msg.isNew == false) {
+                // Saved/historical message — upsert to savedMessages only
+                savedMessageMap[key] = msg
+                _savedMessages.postValue(
+                    savedMessageMap.values.sortedByDescending { it.ts }.toList()
+                )
             } else {
-                gson.fromJson(json, Message::class.java)
+                // New (isNew absent or true) — upsert to both live and saved
+                liveMessageMap[key] = msg
+                _messages.postValue(
+                    liveMessageMap.values.sortedByDescending { it.ts }.toList()
+                )
+                savedMessageMap[key] = msg
+                _savedMessages.postValue(
+                    savedMessageMap.values.sortedByDescending { it.ts }.toList()
+                )
             }
-            val current = _messages.value?.toMutableList() ?: mutableListOf()
-            current.add(0, wrapper) // newest first
-            _messages.postValue(current)
         } catch (e: Exception) {
-            // ignore
+            // ignore malformed payload
+        }
+    }
+
+    private fun processMessageStatus(json: JsonObject) {
+        try {
+            val inner = json.getAsJsonObject("messageStatus") ?: return
+            val status = gson.fromJson(inner, MessageStatus::class.java)
+            val key = "${status.id}|${status.recipient}"
+
+            var liveUpdated  = false
+            var savedUpdated = false
+
+            liveMessageMap[key]?.let { existing ->
+                liveMessageMap[key] = existing.copy(status = status.status)
+                liveUpdated = true
+            }
+            savedMessageMap[key]?.let { existing ->
+                savedMessageMap[key] = existing.copy(status = status.status)
+                savedUpdated = true
+            }
+
+            if (liveUpdated) {
+                _messages.postValue(
+                    liveMessageMap.values.sortedByDescending { it.ts }.toList()
+                )
+            }
+            if (savedUpdated) {
+                _savedMessages.postValue(
+                    savedMessageMap.values.sortedByDescending { it.ts }.toList()
+                )
+            }
+        } catch (e: Exception) {
+            // ignore malformed payload
         }
     }
 
@@ -315,7 +389,10 @@ object ClusterRepository {
         _deviceStates.postValue(emptyMap())
         _neighbors.postValue(null)
         _graphData.postValue(null)
+        liveMessageMap.clear()
+        savedMessageMap.clear()
         _messages.postValue(emptyList())
+        _savedMessages.postValue(emptyList())
         _locationUpdates.postValue(null)
         _trafficEntries.postValue(emptyList())
         _pingEntries.postValue(emptyList())
@@ -343,7 +420,12 @@ object ClusterRepository {
             if (snapshot.graph.isEmpty()) null
             else GraphPayload(snapshot.graph)
         )
-        _messages.postValue(snapshot.messages)
+        liveMessageMap.clear()
+        liveMessageMap.putAll(snapshot.liveMessages)
+        _messages.postValue(liveMessageMap.values.sortedByDescending { it.ts }.toList())
+        savedMessageMap.clear()
+        savedMessageMap.putAll(snapshot.savedMessages)
+        _savedMessages.postValue(savedMessageMap.values.sortedByDescending { it.ts }.toList())
         _trafficEntries.postValue(snapshot.trafficEntries)
         _pingEntries.postValue(snapshot.pingEntries)
         _locationUpdates.postValue(null)
