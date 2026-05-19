@@ -27,6 +27,7 @@ class MapFragment : Fragment() {
     private val viewModel: MapViewModel by viewModels()
 
     private var deviceOverlay: DeviceOverlay? = null
+    private var mgrsOverlay: MgrsOverlay? = null
     private var messageAdapter: MessageAdapter? = null
 
     private var mapInitialised = false
@@ -202,6 +203,43 @@ class MapFragment : Fragment() {
             binding.mapView.invalidate()
         }
 
+        // MGRS overlay checkbox — unchecked by default
+        binding.checkboxMgrs.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                if (mgrsOverlay == null) {
+                    mgrsOverlay = MgrsOverlay(requireContext()).also { overlay ->
+                        // Pass the current bar height so bottom labels clear the bar.
+                        // Use a ViewTreeObserver so we get the actual measured height,
+                        // even if the bar hasn't been laid out yet when this runs.
+                        val bar = binding.bottomFilterBar
+                        if (bar.height > 0) {
+                            overlay.bottomInsetPx = bar.height
+                        } else {
+                            bar.viewTreeObserver.addOnGlobalLayoutListener(
+                                object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                                    override fun onGlobalLayout() {
+                                        overlay.bottomInsetPx = bar.height
+                                        bar.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    // Insert below device overlay so markers appear on top
+                    val deviceIdx = binding.mapView.overlays.indexOf(deviceOverlay)
+                    if (deviceIdx >= 0) {
+                        binding.mapView.overlays.add(deviceIdx, mgrsOverlay!!)
+                    } else {
+                        binding.mapView.overlays.add(mgrsOverlay!!)
+                    }
+                }
+            } else {
+                mgrsOverlay?.let { binding.mapView.overlays.remove(it) }
+                mgrsOverlay = null
+            }
+            binding.mapView.invalidate()
+        }
+
         // Dismiss messages
         binding.btnDismissMessages.setOnClickListener {
             binding.messagePanel.visibility = View.GONE
@@ -227,8 +265,14 @@ class MapFragment : Fragment() {
     // ── Observers ─────────────────────────────────────────────────────────────
 
     private fun setupObservers() {
-        // Create the overlay as soon as we know the self ID, regardless of whether
-        // we have a self location yet. Centering is handled separately below.
+        // Create the overlay immediately with an empty selfId so other devices
+        // are rendered as soon as their locations arrive — before self is known.
+        // selfId is updated when the self payload arrives.
+        deviceOverlay = DeviceOverlay(requireContext(), "") { state ->
+            showDeviceDetail(state)
+        }
+        binding.mapView.overlays.add(deviceOverlay)
+
         viewModel.selfDevice.observe(viewLifecycleOwner) { self ->
             self ?: return@observe
 
@@ -245,12 +289,9 @@ class MapFragment : Fragment() {
                 binding.tvSelfName.visibility = View.GONE
             }
 
-            if (deviceOverlay == null) {
-                deviceOverlay = DeviceOverlay(requireContext(), self.id) { state ->
-                    showDeviceDetail(state)
-                }
-                binding.mapView.overlays.add(deviceOverlay)
-            }
+            // Update selfId on the overlay so self is correctly identified
+            deviceOverlay?.selfId = self.id
+
             // Centre on self if we have coordinates and haven't centred yet
             if (!mapInitialised) {
                 val lat = self.lat.toDoubleOrNull() ?: return@observe

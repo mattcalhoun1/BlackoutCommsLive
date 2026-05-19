@@ -19,9 +19,12 @@ import org.osmdroid.views.overlay.Overlay
  */
 class DeviceOverlay(
     private val context: Context,
-    private val selfId: String,
+    selfId: String = "",         // empty until self payload arrives
     private val onDeviceTapped: (DeviceState) -> Unit
 ) : Overlay() {
+
+    /** Updated when the self payload arrives so the correct marker is identified. */
+    var selfId: String = selfId
 
     var deviceStates: Map<String, DeviceState> = emptyMap()
     var graphData: GraphPayload? = null

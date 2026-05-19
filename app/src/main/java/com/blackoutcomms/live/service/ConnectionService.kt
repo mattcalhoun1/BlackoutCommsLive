@@ -417,7 +417,16 @@ class ConnectionService : Service() {
      * Start a scan and return results via callback so the UI can show a picker.
      */
     fun scanForBleDevices(onResults: (List<android.bluetooth.le.ScanResult>) -> Unit) {
-        bleFeedManager?.closeBle()
+        // Guard BLUETOOTH_SCAN on Android 12+ to prevent SecurityException crash
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "BLUETOOTH_SCAN not granted — cannot scan")
+                onResults(emptyList())
+                return
+            }
+        }
+        bleFeedManager?.close()
         bleFeedManager = BleFeedManager(this).also { mgr ->
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 mgr.bleState.observeForever { state -> _bleState.postValue(state) }

@@ -89,6 +89,25 @@
 
     </LinearLayout>
 
+    <!-- MGRS overlay checkbox — bottom-right corner, above the filter bar -->
+    <CheckBox
+        android:id="@+id/checkbox_mgrs"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="82dp"
+        android:text="MGRS"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp"
+        android:buttonTint="@color/accent"
+        android:background="@drawable/bg_semi_dark"
+        android:paddingStart="6dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:checked="false" />
+
     <!-- Recenter button — bottom-left corner, above the filter bar -->
     <ImageButton
         android:id="@+id/btn_recenter"

@@ -1,6 +1,7 @@
 package com.blackoutcomms.live.ui
 
 import android.Manifest
+import android.provider.Settings
 import android.util.Log
 import android.content.ComponentName
 import android.content.Context
@@ -85,7 +86,13 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 updateConnectIcon(state)
                 when (state) {
                     BleFeedManager.BleState.CONNECTED  -> activeMapViewModel()?.onBleConnected()
-                    BleFeedManager.BleState.NEEDS_SCAN -> startBleScanFlow()
+                    BleFeedManager.BleState.NEEDS_SCAN -> {
+                        // Only start the scan flow if permissions are already granted.
+                        // If not, requestRequiredPermissions() is in flight — once the
+                        // user grants, onRequestPermissionsResult calls startBle() which
+                        // will post NEEDS_SCAN again at the right time.
+                        if (hasBlePermissions()) startBleScanFlow()
+                    }
                     else -> {}
                 }
             }
@@ -395,11 +402,13 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     override fun onConnectBle() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Location permission required for BLE scanning", Toast.LENGTH_LONG).show()
-            ActivityCompat.requestPermissions(this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_PERMISSIONS)
+        if (!hasBlePermissions()) {
+            if (blePermissionsExplicitlyDenied()) {
+                showPermissionDeniedDialog()
+            } else {
+                // Permissions not yet requested — ask now
+                requestRequiredPermissions()
+            }
             return
         }
         connectionService?.cancelUsbConnection()
@@ -408,7 +417,14 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     /** Triggered when BLE state transitions to NEEDS_SCAN — start the scan/pick/pin flow. */
     private fun startBleScanFlow() {
-        // Show spinner for the duration of the 8-second scan
+        if (!hasBlePermissions()) {
+            if (blePermissionsExplicitlyDenied()) {
+                showPermissionDeniedDialog()
+            }
+            // If not yet requested, requestRequiredPermissions() in onCreate handles it.
+            // onRequestPermissionsResult will call startBle() once granted.
+            return
+        }
         val scanningDialog = BleScanningDialog().also { dlg ->
             dlg.onCancel = { connectionService?.stopBleScan() }
             dlg.show(supportFragmentManager, BleScanningDialog.TAG)
@@ -485,10 +501,21 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     private fun requestRequiredPermissions() {
         val needed = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
+
+        // Android 11 and below: location permission is required by the OS for BLE scanning.
+        // Show a rationale first if the user has previously denied it, since the reason
+        // is non-obvious (we don't use location data — it's an OS-level BLE requirement).
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(
+                    this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+                showLocationRationaleDialog()
+                return   // dialog will call requestRequiredPermissions() again after explaining
+            }
             needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -499,7 +526,6 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 needed.add(Manifest.permission.BLUETOOTH_CONNECT)
             }
         }
-        // POST_NOTIFICATIONS required at runtime on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -507,8 +533,171 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             }
         }
         if (needed.isNotEmpty()) {
+            // Record that we have asked at least once so blePermissionsExplicitlyDenied()
+            // can distinguish first-run (never asked) from post-denial states.
+            getSharedPreferences("perm_prefs", MODE_PRIVATE).edit()
+                .putBoolean("ble_perm_requested", true).apply()
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQUEST_PERMISSIONS)
         }
+    }
+
+    /**
+     * Explains why location permission is needed for BLE scanning on Android 11 and below.
+     * Android requires location permission to scan for nearby Bluetooth devices — this is
+     * an OS policy, not because the app uses location data.
+     */
+    private fun showLocationRationaleDialog() {
+        this.themedAlertBuilder()
+            .setTitle("Location Permission Required")
+            .setMessage(
+                "On this version of Android, the OS requires Location permission to " +
+                "scan for nearby Bluetooth devices.\n\n" +
+                "Blackout Comms Live does not collect, store, or use your location — " +
+                "this permission is only needed to find your Blackout Comms device."
+            )
+            .setPositiveButton("Continue") { _, _ ->
+                // Re-run without rationale check — will now show the system dialog
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                    REQUEST_PERMISSIONS
+                )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Returns true if all permissions needed for BLE scanning are granted.
+     * Called before any BLE operation to avoid SecurityException crashes.
+     */
+    private fun hasBlePermissions(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
+                    != PackageManager.PERMISSION_GRANTED) return false
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) return false
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED) return false
+        }
+        return true
+    }
+
+    /**
+     * Returns true if BLE permissions have been explicitly denied by the user
+     * (i.e. the system dialog has been shown at least once and declined).
+     * Returns false on first run where permissions simply haven't been asked yet.
+     * Used to decide whether to show an explanation dialog vs silently waiting
+     * for the system permission dialog to complete.
+     */
+    private fun blePermissionsExplicitlyDenied(): Boolean {
+        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            Manifest.permission.BLUETOOTH_SCAN
+        else
+            Manifest.permission.ACCESS_FINE_LOCATION
+
+        val notGranted = ContextCompat.checkSelfPermission(this, perm) !=
+            PackageManager.PERMISSION_GRANTED
+
+        // shouldShowRequestPermissionRationale returns true only after at least
+        // one denial without "Don't ask again" — it's false on first run AND
+        // after permanent denial. We use the shared pref to distinguish them.
+        val everRequested = getSharedPreferences("perm_prefs", MODE_PRIVATE)
+            .getBoolean("ble_perm_requested", false)
+
+        return notGranted && everRequested
+    }
+
+    /**
+     * Shows a dialog explaining why BLE permissions are needed.
+     * If the user has permanently denied (checked Dont ask again), the system
+     * dialog will not appear — in that case we offer a direct link to Settings.
+     * Otherwise we offer to re-request via the normal system dialog.
+     */
+    private fun showPermissionDeniedDialog() {
+        // Detect permanent denial: shouldShowRequestPermissionRationale returns false
+        // after Dont ask again AND after the very first denial before any request.
+        // We distinguish them by checking whether any permission has been requested before
+        // (if the permission is simply ungranted but never requested, rationale is false too).
+        val permanentlyDenied = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val notGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED
+            val cantAsk = !ActivityCompat.shouldShowRequestPermissionRationale(
+                this, Manifest.permission.BLUETOOTH_SCAN)
+            notGranted && cantAsk
+        } else {
+            val notGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            val cantAsk = !ActivityCompat.shouldShowRequestPermissionRationale(
+                this, Manifest.permission.ACCESS_FINE_LOCATION)
+            notGranted && cantAsk
+        }
+
+        if (permanentlyDenied) {
+            // "Don't ask again" was checked — system dialog won't appear, send to Settings
+            this.themedAlertBuilder()
+                .setTitle("Bluetooth Permission Required")
+                .setMessage(
+                    "Bluetooth permissions have been permanently denied.\n\n" +
+                    "Please open Settings and enable Bluetooth permissions for " +
+                    "Blackout Comms Live to scan for and connect to your device."
+                )
+                .setPositiveButton("Open Settings") { _, _ ->
+                    startActivity(
+                        android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = android.net.Uri.fromParts("package", packageName, null)
+                        }
+                    )
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            // Standard denial — offer to re-request via the system dialog
+            this.themedAlertBuilder()
+                .setTitle("Bluetooth Permission Required")
+                .setMessage(
+                    "Bluetooth permissions are required to scan for and connect to " +
+                    "Blackout Comms devices."
+                )
+                .setPositiveButton("Grant Permissions") { _, _ ->
+                    requestRequiredPermissions()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_PERMISSIONS) return
+
+        // Check BLE-critical permissions specifically — don't use allGranted because
+        // a POST_NOTIFICATIONS denial (non-critical) would otherwise block startBle()
+        // and falsely trigger the "permissions denied" warning.
+        val criticalPerms = listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+
+        val criticalDenied = permissions.zip(grantResults.toList()).any { (perm, result) ->
+            result != PackageManager.PERMISSION_GRANTED && perm in criticalPerms
+        }
+
+        if (criticalDenied) {
+            // A BLE-critical permission was explicitly denied in this result
+            showPermissionDeniedDialog()
+        } else if (hasBlePermissions()) {
+            // BLE permissions are granted (may have been granted previously or just now)
+            // — start BLE regardless of whether POST_NOTIFICATIONS was granted
+            connectionService?.startBle()
+        }
+        // POST_NOTIFICATIONS denial alone: non-critical, app works fine without it
     }
 
     override fun onDestroy() {

@@ -56,6 +56,33 @@ class BleFeedManager(context: Context) : BleManager(context) {
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     }
 
+    /**
+     * Returns true if the required BLE permissions are currently granted.
+     * Guards every Bluetooth API call inside BleFeedManager so we never reach
+     * the stack and trigger "Need BLUETOOTH_SCAN permission" errors.
+     */
+    private fun hasBlePermission(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "BLUETOOTH_SCAN not granted")
+                return false
+            }
+            if (context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "BLUETOOTH_CONNECT not granted")
+                return false
+            }
+        } else {
+            if (context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "ACCESS_FINE_LOCATION not granted (required for BLE on API < 31)")
+                return false
+            }
+        }
+        return true
+    }
+
     // ── State ─────────────────────────────────────────────────────────────────
 
     enum class BleState { IDLE, SCANNING, NEEDS_SCAN, CONNECTING, CONNECTED, DISCONNECTED, NOT_SUPPORTED }
@@ -237,6 +264,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
         durationMs: Long = 8_000L,
         onResults: (List<android.bluetooth.le.ScanResult>) -> Unit
     ) {
+        if (!hasBlePermission()) { onResults(emptyList()); return }
         val scanner = btAdapter?.bluetoothLeScanner ?: return
 
         _bleState.postValue(BleState.SCANNING)
@@ -271,6 +299,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
     }
 
     fun stopScan() {
+        if (!hasBlePermission()) return
         val scanner = btAdapter?.bluetoothLeScanner ?: return
         activeScanCallback?.let { scanner.stopScan(it) }
         activeScanCallback = null
@@ -286,6 +315,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
      *   - correct choice for a freshly scanned device the user just picked
      */
     fun connectByAddress(address: String, autoConnect: Boolean = false) {
+        if (!hasBlePermission()) return
         val device = try { btAdapter?.getRemoteDevice(address) ?: return }
                       catch (e: Exception) { Log.e(TAG, "Invalid address: $address"); return }
         connectBle(device, autoConnect)
@@ -323,14 +353,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
         shouldReconnect = true
         _bleState.postValue(BleState.CONNECTING)
 
-        val bondState = device.bondState
-        val bondDesc  = when (bondState) {
-            BluetoothDevice.BOND_NONE    -> "BOND_NONE (10)"
-            BluetoothDevice.BOND_BONDING -> "BOND_BONDING (11)"
-            BluetoothDevice.BOND_BONDED  -> "BOND_BONDED (12)"
-            else -> "UNKNOWN ($bondState)"
-        }
-        Log.i(TAG, "connectDevice: ${device.address}, bondState=$bondDesc, autoConnect=$autoConnect")
+        Log.i(TAG, "connectDevice: ${device.address}, autoConnect=$autoConnect")
 
         // Always attempt GATT connection directly regardless of bond state.
         //
@@ -416,7 +439,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
                             btAdapter?.getRemoteDevice(device.address)
                         } catch (_: Exception) { null } ?: device
 
-                        Log.i(TAG, "Reconnecting to ${freshDevice.address}, bondState=${freshDevice.bondState}")
+                        Log.i(TAG, "Reconnecting to ${freshDevice.address}")
                         connectDevice(freshDevice, autoConnect = true)
                     }, 5_000)
                 }
@@ -492,7 +515,7 @@ class BleFeedManager(context: Context) : BleManager(context) {
         }
         writeCharacteristic(tx, "PIN:$pin".toByteArray(Charsets.UTF_8),
             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-            .done { Log.i(TAG, "PIN $pin sent successfully") }
+            .done { Log.i(TAG, "PIN sent successfully") }
             .fail { _, status -> Log.e(TAG, "PIN send failed, status=$status") }
             .enqueue()
     }
