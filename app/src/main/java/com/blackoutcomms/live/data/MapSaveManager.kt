@@ -37,7 +37,8 @@ object MapSaveManager {
         val devices: Map<String, DeviceState>,
         val graph: Map<String, Map<String, GraphRelationship>>,
         val neighbors: Neighbors?,
-        val messages: List<Message>,
+        val liveMessages: Map<String, Message> = emptyMap(),
+        val savedMessages: Map<String, Message> = emptyMap(),
         val trafficEntries: List<TrafficEntry>,
         val pingEntries: List<PingEntry>
     )
@@ -52,14 +53,15 @@ object MapSaveManager {
                 devices        = ClusterRepository.deviceStates.value ?: emptyMap(),
                 graph          = ClusterRepository.graphData.value?.graph ?: emptyMap(),
                 neighbors      = ClusterRepository.neighbors.value,
-                messages       = ClusterRepository.messages.value ?: emptyList(),
+                liveMessages   = ClusterRepository.liveMessageMap.toMap(),
+                savedMessages  = ClusterRepository.savedMessageMap.toMap(),
                 trafficEntries = ClusterRepository.trafficEntries.value ?: emptyList(),
                 pingEntries    = ClusterRepository.pingEntries.value ?: emptyList()
             )
             val json = gson.toJson(snapshot)
             File(context.filesDir, SNAPSHOT_FILE).writeText(json)
             Log.i(TAG, "Snapshot saved (${json.length} bytes, " +
-                "${snapshot.devices.size} devices, ${snapshot.messages.size} messages)")
+                "${snapshot.devices.size} devices, ${snapshot.savedMessages.size} messages)")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Save failed", e)

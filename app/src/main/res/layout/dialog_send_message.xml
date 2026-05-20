@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/surface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Title row: label + optional DM device picker -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:id="@+id/tv_send_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginEnd="10dp" />
+
+            <!-- DM target device picker (hidden for broadcast) -->
+            <LinearLayout
+                android:id="@+id/layout_dm_target"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+
+                <Spinner
+                    android:id="@+id/spinner_dm_target"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="@color/accent"
+                    android:popupBackground="@color/surface" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Message text field -->
+        <EditText
+            android:id="@+id/edit_send_msg"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:gravity="top|start"
+            android:hint="Enter message..."
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary"
+            android:backgroundTint="@color/accent"
+            android:inputType="textMultiLine|textCapSentences"
+            android:maxLines="6"
+            android:scrollbars="vertical"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Character count -->
+        <TextView
+            android:id="@+id/tv_char_count"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_secondary"
+            android:gravity="end"
+            android:layout_marginBottom="14dp" />
+
+        <!-- Priority label -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Priority"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Priority slider -->
+        <SeekBar
+            android:id="@+id/seek_priority"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:progressTint="@color/accent"
+            android:thumbTint="@color/accent"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Priority labels row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Low"
+                android:textSize="9sp" android:textColor="@color/text_secondary"
+                android:fontFamily="monospace" android:gravity="start" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Normal"
+                android:textSize="9sp" android:textColor="@color/text_secondary"
+                android:fontFamily="monospace" android:gravity="center" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Medium"
+                android:textSize="9sp" android:textColor="@color/text_secondary"
+                android:fontFamily="monospace" android:gravity="center" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="High"
+                android:textSize="9sp" android:textColor="@color/text_secondary"
+                android:fontFamily="monospace" android:gravity="center" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="Critical"
+                android:textSize="9sp" android:textColor="@color/accent"
+                android:fontFamily="monospace" android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- Selected priority value -->
+        <TextView
+            android:id="@+id/tv_priority_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/accent"
+            android:gravity="center"
+            android:layout_marginBottom="14dp" />
+
+        <!-- Expiry label -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Expiry"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Expiry dropdown -->
+        <Spinner
+            android:id="@+id/spinner_expiry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="@color/accent"
+            android:popupBackground="@color/surface"
+            android:layout_marginBottom="14dp" />
+
+        <!-- Extra checkbox (nodes / force mesh) -->
+        <CheckBox
+            android:id="@+id/checkbox_extra"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:buttonTint="@color/accent"
+            android:layout_marginBottom="18dp" />
+
+        <!-- Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_send_cancel"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Cancel"
+                android:textColor="@color/text_secondary"
+                android:layout_marginEnd="8dp"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                app:strokeColor="@color/divider" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_send_send"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Send"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                app:backgroundTint="@color/accent" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

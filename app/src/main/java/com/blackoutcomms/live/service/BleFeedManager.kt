@@ -520,6 +520,26 @@ class BleFeedManager(context: Context) : BleManager(context) {
             .enqueue()
     }
 
+    // ── Outgoing message send ─────────────────────────────────────────────────
+
+    /**
+     * Send a JSON payload string to the firmware via the TX characteristic.
+     * Used for outgoing messages (broadcast/DM). A newline is appended so
+     * the firmware's line reader sees a complete frame.
+     */
+    fun sendJson(json: String) {
+        val tx = txCharacteristic ?: run {
+            Log.w(TAG, "TX characteristic not available — cannot send JSON")
+            return
+        }
+        Log.i(TAG, "Sending JSON: $json")
+        writeCharacteristic(tx, "$json".toByteArray(Charsets.UTF_8),
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+            .done { Log.i(TAG, "JSON sent successfully") }
+            .fail { _, status -> Log.e(TAG, "JSON send failed, status=$status") }
+            .enqueue()
+    }
+
     // ── Cleanup ───────────────────────────────────────────────────────────────
 
     fun closeBle() {

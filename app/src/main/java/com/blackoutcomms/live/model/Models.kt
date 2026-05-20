@@ -126,13 +126,16 @@ data class MessagePayload(
 }
 
 data class Message(
+    val id: String? = null,           // optional unique message ID from firmware
     val sender: String,
     val recipient: String,
-    val delivery: String,   // "direct" or "mesh"
-    val status: String,     // "delivered", "confirmed", "queued"
+    val delivery: String,             // "direct" or "mesh"
+    val status: String,               // "delivered", "confirmed", "queued"
     val ts: String,
     val title: String,
-    val text: String
+    val text: String,
+    val isNew: Boolean? = null,       // null/absent or true = new; false = saved/historical
+    val priority: String? = null      // "Low", "Normal", "Medium", "High", "Critical"
 )
 
 // ── Composite device state (runtime) ─────────────────────────────────────────
@@ -152,6 +155,15 @@ data class DeviceState(
 )
 
 enum class NeighborType { NONE, DIRECT, INDIRECT }
+
+// ── Message Status Update ────────────────────────────────────────────────────
+
+data class MessageStatus(
+    val id: String,
+    val sender: String,
+    val recipient: String,
+    val status: String
+)
 
 // ── Traffic ───────────────────────────────────────────────────────────────────
 

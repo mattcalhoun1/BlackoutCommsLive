@@ -441,6 +441,16 @@ class ConnectionService : Service() {
         _bleState.postValue(BleFeedManager.BleState.IDLE)
     }
 
+    /**
+     * Send a JSON string to the firmware over BLE.
+     * Returns false if not connected.
+     */
+    fun sendJson(json: String): Boolean {
+        val mgr = bleFeedManager ?: return false
+        mgr.sendJson(json)
+        return true
+    }
+
     fun connectBle(deviceAddress: String) = connectBleWithPin(deviceAddress)
 
     /** Single stable accessor — always returns the same LiveData instance. */

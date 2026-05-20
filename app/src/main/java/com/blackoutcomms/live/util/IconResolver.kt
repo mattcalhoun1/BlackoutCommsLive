@@ -56,8 +56,12 @@ object IconResolver {
     }
 
     fun messageStatusIcon(message: Message): Int {
+        // meshaccepted is a cross-delivery status — always uses mesh_accepted icon
+        if (message.status.equals("meshaccepted", ignoreCase = true)) {
+            return R.drawable.mesh_accepted
+        }
         return if (message.recipient == "[all devices]") {
-            if (message.status == "confirmed")
+            if (message.status == "confirmed" || message.status == "delivered")
                 R.drawable.mesh_accepted
             else
                 R.drawable.mesh_queued
