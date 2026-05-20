@@ -1,6 +1,6 @@
-# Blackout Comms Live — Android App
+# Blackout Comms® Live — Android App
 
-A graphical tracking and monitoring app for Blackout Comms mesh clusters.
+A graphical tracking and monitoring app for Blackout Comms® mesh clusters.
 Displays up to 90 devices on an offline-capable OSMDroid map with real-time
 location, mesh graph, battery, relay state, and messaging.
 
@@ -121,5 +121,5 @@ You are free to:
 Under the following terms:
 * **Attribution** — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
 * **NonCommercial** — You may not use the material for commercial purposes.
-
+* **Trademark** - The term Blackout Comms® is a registered trademark. You may not use the name in any product without permission from Altware Development LLC.
 To view a copy of this license, visit http://creativecommons.org.
