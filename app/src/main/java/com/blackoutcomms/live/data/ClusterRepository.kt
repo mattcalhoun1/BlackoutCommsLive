@@ -325,27 +325,37 @@ object ClusterRepository {
             val status = gson.fromJson(inner, MessageStatus::class.java)
             val key = "${status.id}|${status.recipient}"
 
-            var liveUpdated  = false
-            var savedUpdated = false
+            val isDeleted = status.status.equals("deleted", ignoreCase = true)
 
-            liveMessageMap[key]?.let { existing ->
-                liveMessageMap[key] = existing.copy(status = status.status)
-                liveUpdated = true
-            }
-            savedMessageMap[key]?.let { existing ->
-                savedMessageMap[key] = existing.copy(status = status.status)
-                savedUpdated = true
-            }
+            if (isDeleted) {
+                // Remove the message from both maps
+                val liveRemoved  = liveMessageMap.remove(key) != null
+                val savedRemoved = savedMessageMap.remove(key) != null
+                if (liveRemoved)  _messages.postValue(liveMessageMap.values.sortedByDescending { it.ts }.toList())
+                if (savedRemoved) _savedMessages.postValue(savedMessageMap.values.sortedByDescending { it.ts }.toList())
+            } else {
+                var liveUpdated  = false
+                var savedUpdated = false
 
-            if (liveUpdated) {
-                _messages.postValue(
-                    liveMessageMap.values.sortedByDescending { it.ts }.toList()
-                )
-            }
-            if (savedUpdated) {
-                _savedMessages.postValue(
-                    savedMessageMap.values.sortedByDescending { it.ts }.toList()
-                )
+                liveMessageMap[key]?.let { existing ->
+                    liveMessageMap[key] = existing.copy(status = status.status)
+                    liveUpdated = true
+                }
+                savedMessageMap[key]?.let { existing ->
+                    savedMessageMap[key] = existing.copy(status = status.status)
+                    savedUpdated = true
+                }
+
+                if (liveUpdated) {
+                    _messages.postValue(
+                        liveMessageMap.values.sortedByDescending { it.ts }.toList()
+                    )
+                }
+                if (savedUpdated) {
+                    _savedMessages.postValue(
+                        savedMessageMap.values.sortedByDescending { it.ts }.toList()
+                    )
+                }
             }
         } catch (e: Exception) {
             // ignore malformed payload
