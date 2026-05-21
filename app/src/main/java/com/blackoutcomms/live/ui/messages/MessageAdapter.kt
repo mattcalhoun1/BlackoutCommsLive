@@ -34,7 +34,9 @@ class MessageAdapter(
     }
 
     fun updateBleConnected(connected: Boolean) {
-        bleConnected = connected
+        val isTestMode = com.blackoutcomms.live.service.ConnectionService.TEST_MODE ||
+                         com.blackoutcomms.live.service.ConnectionService.testModeActive
+        bleConnected = connected || isTestMode
         notifyDataSetChanged()
     }
 

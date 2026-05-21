@@ -34,7 +34,8 @@ import kotlinx.coroutines.*
 class ConnectionService : Service() {
 
     companion object {
-        const val TEST_MODE = false   // ← flip to false for live hardware
+        const val TEST_MODE = false  // compile-time default; overridden at runtime by activateTestMode()
+        var testModeActive = false   // set to true at runtime via the 5-tap Easter egg
         private const val TAG = "ConnectionService"
         private const val CHANNEL_ID = "blackout_comms_channel"
         private const val NOTIF_ID = 1001
@@ -72,21 +73,16 @@ class ConnectionService : Service() {
         fun getService(): ConnectionService = this@ConnectionService
     }
 
+    /** Instance-level accessor for test mode state (mirrors companion object). */
+    val testModeActive: Boolean get() = Companion.testModeActive
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIF_ID,
-                buildNotification("Blackout Comms Live running"),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            )
-        } else {
-            startForeground(NOTIF_ID, buildNotification("Blackout Comms Live running"))
-        }
-        if (TEST_MODE) {
+        startForeground(NOTIF_ID, buildNotification("Blackout Comms Live running"))
+        if (TEST_MODE || testModeActive) {
             startTestMode()
         } else {
             // Auto-start both USB and BLE connection attempts on launch
@@ -143,14 +139,16 @@ class ConnectionService : Service() {
                 for (fileName in files) {
                     delay(800)
                     try {
-                        assets.open("test_data/$fileName").bufferedReader().use { reader ->
-                            reader.readText().trim().split("\n").forEach { line ->
-                                val trimmed = line.trim()
-                                if (trimmed.isNotEmpty()) {
-                                    ClusterRepository.ingest(trimmed)
-                                    delay(200)
-                                }
-                            }
+                        // Read the entire file as a single string and collapse all
+                        // whitespace/newlines so multi-line JSON is treated as one payload.
+                        val raw = assets.open("test_data/$fileName")
+                            .bufferedReader()
+                            .readText()
+                            .replace("\n", " ")
+                            .replace("\r", "")
+                            .trim()
+                        if (raw.isNotEmpty()) {
+                            ClusterRepository.ingest(raw)
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error reading test file $fileName", e)
@@ -457,6 +455,17 @@ class ConnectionService : Service() {
     fun getCurrBleState(): LiveData<BleFeedManager.BleState> = bleState
 
     // ── Disconnect ────────────────────────────────────────────────────────────
+
+    /**
+     * Switches the service to test mode at runtime (triggered by the 5-tap Easter egg
+     * on the About screen logo). Disconnects any live BLE/USB connection and replays
+     * test data files for the remainder of the app session.
+     */
+    fun activateTestMode() {
+        Companion.testModeActive = true
+        disconnect()
+        startTestMode()
+    }
 
     fun disconnect() {
         cancelPinTimeout()

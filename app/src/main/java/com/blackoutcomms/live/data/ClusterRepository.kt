@@ -297,6 +297,15 @@ object ClusterRepository {
             val msg = gson.fromJson(msgJson, Message::class.java)
             val key = messageKey(msg)
 
+            // A "deleted" status means the message should be removed from both maps
+            if (msg.status.equals("deleted", ignoreCase = true)) {
+                val liveRemoved  = liveMessageMap.remove(key) != null
+                val savedRemoved = savedMessageMap.remove(key) != null
+                if (liveRemoved)  _messages.postValue(liveMessageMap.values.sortedByDescending { it.ts }.toList())
+                if (savedRemoved) _savedMessages.postValue(savedMessageMap.values.sortedByDescending { it.ts }.toList())
+                return
+            }
+
             if (msg.isNew == false) {
                 // Saved/historical message — upsert to savedMessages only
                 savedMessageMap[key] = msg

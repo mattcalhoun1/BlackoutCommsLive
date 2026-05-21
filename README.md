@@ -62,12 +62,11 @@ live feed.
 
 ---
 
-## Switching to Live Hardware
+## Switching to Test Mode
 
-Open `ConnectionService.kt` and set:
-   ```kotlin
-   const val TEST_MODE = false
-   ```
+1. Navigate to the About view
+2. Tap the Blackout Comms logo 5 times
+3. Voila
 
 ---
 

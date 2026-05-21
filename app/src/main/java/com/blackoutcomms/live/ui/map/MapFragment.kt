@@ -5,7 +5,7 @@ import android.os.Bundle
 import android.view.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.databinding.FragmentMapBinding
@@ -24,7 +24,9 @@ class MapFragment : Fragment() {
 
     private var _binding: FragmentMapBinding? = null
     private val binding get() = _binding!!
-    private val viewModel: MapViewModel by viewModels()
+    // activityViewModels() shares the same instance as MainActivity.mapViewModel()
+    // so setMaxAge() calls from outside the fragment (e.g. test mode) take effect immediately
+    private val viewModel: MapViewModel by activityViewModels()
 
     private var deviceOverlay: DeviceOverlay? = null
     private var mgrsOverlay: MgrsOverlay? = null

@@ -266,29 +266,51 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     /**
-     * Swaps the toolbar BLE icon for a data-activity icon for 0.5 seconds.
-     * Each call restarts the timer (debounce), so rapid data keeps the
-     * spinner showing continuously without flickering.
-     * The menu item is disabled while the spinner is showing so it cannot
-     * be tapped accidentally during data reception.
+     * Shows a spinning data-activity icon on the toolbar connect button for 0.5 seconds.
+     * Uses an ActionView with an ObjectAnimator for real rotation, since MenuItem icons
+     * cannot be animated directly. Each call restarts the timer (debounce).
+     * The menu item is disabled while spinning to prevent accidental taps.
      */
+    private var spinAnimator: android.animation.ObjectAnimator? = null
+
     private fun showDataActivityIcon() {
         dataActivityHandler.removeCallbacks(stopActivityRunnable)
         if (!dataActivityShowing) {
             dataActivityShowing = true
-            connectMenuItem?.setIcon(R.drawable.ic_data_activity)
-            // Gray tint so it visually distinguishes from the normal (blue/white) BLE icon
-            connectMenuItem?.icon?.setColorFilter(
-                android.graphics.Color.parseColor("#888888"), PorterDuff.Mode.SRC_IN)
-            connectMenuItem?.isEnabled = false
+
+            // Inflate an ImageView as the action view so we can animate it
+            val spinView = android.widget.ImageView(this).apply {
+                setImageResource(R.drawable.ic_data_activity)
+                // Gray tint
+                setColorFilter(android.graphics.Color.parseColor("#888888"),
+                    android.graphics.PorterDuff.Mode.SRC_IN)
+                val size = (24 * resources.displayMetrics.density).toInt()
+                layoutParams = android.view.ViewGroup.LayoutParams(size, size)
+            }
+
+            // Continuously rotate 0→360
+            spinAnimator?.cancel()
+            spinAnimator = android.animation.ObjectAnimator
+                .ofFloat(spinView, android.view.View.ROTATION, 0f, 360f)
+                .apply {
+                    duration = 700
+                    repeatCount = android.animation.ObjectAnimator.INFINITE
+                    interpolator = android.view.animation.LinearInterpolator()
+                    start()
+                }
+
+            connectMenuItem?.actionView = spinView
+            connectMenuItem?.isEnabled  = false
         }
         dataActivityHandler.postDelayed(stopActivityRunnable, 500)
     }
 
     private fun stopDataActivityIcon() {
+        spinAnimator?.cancel()
+        spinAnimator = null
         dataActivityShowing = false
+        connectMenuItem?.actionView = null   // remove action view, restore icon
         connectMenuItem?.isEnabled = true
-        connectMenuItem?.setIcon(R.drawable.ic_connect)
         val state = connectionService?.getCurrBleState()?.value ?: BleFeedManager.BleState.IDLE
         updateConnectIcon(state)
     }
@@ -432,13 +454,18 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
             .show()
     }
 
-    /** Returns the ViewModel of the currently active MapFragment, or null. */
-    private fun activeMapViewModel(): com.blackoutcomms.live.ui.map.MapViewModel? {
-        val frag = supportFragmentManager.findFragmentById(R.id.fragment_container)
-        return if (frag is com.blackoutcomms.live.ui.map.MapFragment) {
-            androidx.lifecycle.ViewModelProvider(frag)[com.blackoutcomms.live.ui.map.MapViewModel::class.java]
-        } else null
-    }
+    /** Returns the MapViewModel (activity-scoped, same instance as MapFragment uses). */
+    fun activeMapViewModel(): com.blackoutcomms.live.ui.map.MapViewModel = mapViewModel()
+
+    /**
+     * Returns the MapViewModel scoped to the activity, regardless of which tab
+     * is currently visible. Used when we need to update map state from outside
+     * MapFragment (e.g. switching MaxAge to ALL_TIME on test mode activation).
+     * MapFragment observes the same ViewModel instance so changes take effect
+     * immediately when the user next visits the map tab.
+     */
+    fun mapViewModel(): com.blackoutcomms.live.ui.map.MapViewModel =
+        androidx.lifecycle.ViewModelProvider(this)[com.blackoutcomms.live.ui.map.MapViewModel::class.java]
 
     // ── ConnectionDialog.Listener ─────────────────────────────────────────────
 

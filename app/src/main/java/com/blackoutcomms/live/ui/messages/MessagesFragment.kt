@@ -71,8 +71,11 @@ class MessagesFragment : Fragment() {
     }
 
     private fun updateSendButtonsEnabled() {
-        binding.btnSendDm.isEnabled        = bleConnected
-        binding.btnSendBroadcast.isEnabled = bleConnected
+        val isTestMode = com.blackoutcomms.live.service.ConnectionService.TEST_MODE ||
+                         com.blackoutcomms.live.service.ConnectionService.testModeActive
+        val canSend = bleConnected || isTestMode
+        binding.btnSendDm.isEnabled        = canSend
+        binding.btnSendBroadcast.isEnabled = canSend
     }
 
     private fun showSendDialog(isBroadcast: Boolean, preselectedDeviceId: String? = null) {
@@ -82,17 +85,29 @@ class MessagesFragment : Fragment() {
         dialog.deviceStates         = viewModel.deviceStates.value ?: emptyMap()
         dialog.preselectedDeviceId  = preselectedDeviceId
         dialog.onSend = { json ->
-            val activity = requireActivity() as? MainActivity
-            val sent = activity?.connectionService?.sendJson(json) ?: false
-            if (sent) {
-                val sendingDialog = SendingDialog()
-                sendingDialog.show(parentFragmentManager, SendingDialog.TAG)
-            } else {
+            val activity   = requireActivity() as? MainActivity
+            val isTestMode = com.blackoutcomms.live.service.ConnectionService.TEST_MODE ||
+                             com.blackoutcomms.live.service.ConnectionService.testModeActive
+
+            if (isTestMode) {
+                // In test mode: feed a synthetic incoming message back into the repository
+                // as if the firmware had echoed it, so the user can see it in the list
+                injectTestMessage(json, isBroadcast)
                 android.widget.Toast.makeText(
-                    requireContext(),
-                    "Not connected to a Blackout Comms device",
-                    android.widget.Toast.LENGTH_SHORT
+                    requireContext(), "Test mode: message injected", android.widget.Toast.LENGTH_SHORT
                 ).show()
+            } else {
+                val sent = activity?.connectionService?.sendJson(json) ?: false
+                if (sent) {
+                    val sendingDialog = SendingDialog()
+                    sendingDialog.show(parentFragmentManager, SendingDialog.TAG)
+                } else {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Not connected to a Blackout Comms device",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
         dialog.show(parentFragmentManager, SendMessageDialog.TAG)
@@ -100,6 +115,48 @@ class MessagesFragment : Fragment() {
 
     private fun showSendDialogForReply(senderId: String) {
         showSendDialog(isBroadcast = false, preselectedDeviceId = senderId)
+    }
+
+    /**
+     * Test mode only: parses the outgoing JSON (bc/dm payload) and injects a synthetic
+     * incoming "message" payload into ClusterRepository as if the firmware echoed it.
+     * This lets the tester see sent messages appear in the Messages view without BLE.
+     */
+    private fun injectTestMessage(outgoingJson: String, isBroadcast: Boolean) {
+        try {
+            val selfId     = com.blackoutcomms.live.data.ClusterRepository.selfDevice.value?.id ?: "self"
+            val selfName   = com.blackoutcomms.live.data.ClusterRepository.selfDevice.value?.name ?: "self"
+            val ts         = java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.US)
+                               .format(java.util.Date())
+            val msgId      = "test_${System.currentTimeMillis()}"
+
+            val outer = org.json.JSONObject(outgoingJson)
+            val inner = if (isBroadcast) outer.getJSONObject("bc")
+                        else             outer.getJSONObject("dm")
+
+            val msgText   = inner.optString("msg", "")
+            val priority  = inner.optString("priority", "Normal")
+            val recipient = if (isBroadcast) "[all devices]"
+                            else             inner.optString("to", "[all devices]")
+            val delivery  = if (isBroadcast) "mesh" else "direct"
+
+            // Build a standard incoming "message" JSON payload and ingest it
+            val messagePayload = org.json.JSONObject().apply {
+                put("id",        msgId)
+                put("sender",    selfId)
+                put("recipient", recipient)
+                put("delivery",  delivery)
+                put("status",    "queued")
+                put("ts",        ts)
+                put("title",     "From $selfName")
+                put("text",      msgText)
+                put("priority",  priority)
+                put("isNew",     true)
+            }
+            com.blackoutcomms.live.data.ClusterRepository.ingest(messagePayload.toString())
+        } catch (e: Exception) {
+            android.util.Log.e("MessagesFragment", "injectTestMessage failed", e)
+        }
     }
 
     // ── Observers ─────────────────────────────────────────────────────────────

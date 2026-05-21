@@ -1,1 +1,1 @@
-{"sender":"NV006","recipient":"[all devices]","delivery":"mesh","status":"confirmed","ts":"260513155915","title":"Broadcast from BaseAlpha","text":"All units: wind picking up from the west. Maintain current positions until further notice."}
+{"id":"msg002","sender":"NV006","recipient":"[all devices]","delivery":"mesh","status":"confirmed","ts":"260513155915","title":"Broadcast from BaseAlpha","text":"All units: wind picking up from the west. Maintain current positions until further notice.","isNew":true,"priority":"High"}

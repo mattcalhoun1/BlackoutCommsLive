@@ -1,1 +1,1 @@
-{"sender":"NV004","recipient":"NV001","delivery":"direct","status":"delivered","ts":"260513155910","title":"Status from Eagle1","text":"Sector North is clear. Moving to checkpoint Bravo."}
+{"id":"msg001","sender":"NV004","recipient":"NV001","delivery":"direct","status":"delivered","ts":"260513155910","title":"Status from Eagle1","text":"Sector North is clear. Moving to checkpoint Bravo.","isNew":true,"priority":"Normal"}
