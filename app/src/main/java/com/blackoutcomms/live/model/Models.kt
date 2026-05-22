@@ -171,7 +171,8 @@ data class TrafficPayload(
     val bytesIn: Long,
     val bytesOut: Long,
     val packetsIn: Long,
-    val packetsOut: Long
+    val packetsOut: Long,
+    val unknownPackets: Long = 0
 )
 
 /** A traffic sample stamped with the wall-clock time it was received. */
@@ -180,7 +181,8 @@ data class TrafficEntry(
     val bytesIn: Long,
     val bytesOut: Long,
     val packetsIn: Long,
-    val packetsOut: Long
+    val packetsOut: Long,
+    val unknownPackets: Long = 0   // optional — absent in older firmware
 )
 
 // ── Ping (neighbor sighting) ──────────────────────────────────────────────────

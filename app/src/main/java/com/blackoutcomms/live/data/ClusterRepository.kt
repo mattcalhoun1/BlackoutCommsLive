@@ -374,11 +374,12 @@ object ClusterRepository {
     private fun processTraffic(json: JsonObject) {
         val inner = json.getAsJsonObject("traffic") ?: return
         val entry = TrafficEntry(
-            receivedMs  = System.currentTimeMillis(),
-            bytesIn     = inner.get("bytesIn")?.asLong    ?: 0L,
-            bytesOut    = inner.get("bytesOut")?.asLong   ?: 0L,
-            packetsIn   = inner.get("packetsIn")?.asLong  ?: 0L,
-            packetsOut  = inner.get("packetsOut")?.asLong ?: 0L
+            receivedMs     = System.currentTimeMillis(),
+            bytesIn        = inner.get("bytesIn")?.asLong        ?: 0L,
+            bytesOut       = inner.get("bytesOut")?.asLong       ?: 0L,
+            packetsIn      = inner.get("packetsIn")?.asLong      ?: 0L,
+            packetsOut     = inner.get("packetsOut")?.asLong     ?: 0L,
+            unknownPackets = inner.get("unknownPackets")?.asLong ?: 0L
         )
         val nowMs   = System.currentTimeMillis()
         val cutoff  = nowMs - MAX_TRAFFIC_MS

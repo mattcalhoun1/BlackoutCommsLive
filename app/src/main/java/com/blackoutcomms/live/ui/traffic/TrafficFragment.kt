@@ -108,8 +108,9 @@ class TrafficFragment : Fragment() {
         }
 
         // Packets datasets → left axis (smaller numbers)
-        val packetsInData  = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.packetsIn.toFloat()) }
-        val packetsOutData = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.packetsOut.toFloat()) }
+        val packetsInData      = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.packetsIn.toFloat()) }
+        val packetsOutData     = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.packetsOut.toFloat()) }
+        val unknownPacketsData = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.unknownPackets.toFloat()) }
 
         // Bytes datasets → right axis (larger numbers)
         val bytesInData    = entries.mapIndexed { i, e -> Entry(i.toFloat(), e.bytesIn.toFloat()) }
@@ -138,6 +139,12 @@ class TrafficFragment : Fragment() {
             lineWidth = 3.0f
             circleRadius = 3.0f
         }
+        val unknownPacketsSet = makeSet(unknownPacketsData, "Unknown Pkts", "#FF2020", YAxis.AxisDependency.LEFT).apply {
+            lineWidth = 3.0f
+            circleRadius = 3.0f
+            color = Color.argb(0xFF, 0xFF, 0x20, 0x20)   // bright red, fully opaque
+            setCircleColor(Color.argb(0xFF, 0xFF, 0x20, 0x20))
+        }
 
         // Bytes sets — semi-transparent line + filled area underneath
         // Color.parseColor only handles #RRGGBB, so we build ARGB ints manually:
@@ -164,7 +171,8 @@ class TrafficFragment : Fragment() {
             bytesInSet,
             bytesOutSet,
             packetsInSet,
-            packetsOutSet
+            packetsOutSet,
+            unknownPacketsSet
         )
 
         // Store timestamps for the X axis formatter
