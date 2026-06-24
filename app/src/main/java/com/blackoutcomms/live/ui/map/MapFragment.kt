@@ -53,6 +53,8 @@ class MapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        /*
+        // moved earlier in app setup
         Configuration.getInstance().apply {
             userAgentValue = requireContext().packageName
             // filesDir = permanent private storage; never cleared by the OS.
@@ -63,6 +65,7 @@ class MapFragment : Fragment() {
             tileDownloadMaxQueueSize  = 40
             expirationOverrideDuration = -1L   // never expire cached tiles
         }
+         */
 
         setupMap()
         setupMessagePanel()

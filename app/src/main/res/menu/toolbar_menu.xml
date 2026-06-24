@@ -16,6 +16,13 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_auto_save"
+        android:title="Auto Save Snapshot"
+        android:checkable="true"
+        android:checked="true"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_save_map"
         android:title="Save Map"
         app:showAsAction="never" />

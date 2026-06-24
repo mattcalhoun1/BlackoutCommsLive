@@ -23,6 +23,7 @@ import java.io.File
  * locationUpdates is a transient pulse — not saved.
  */
 object MapSaveManager {
+    private var lastSaveMs : Long = 0
 
     private const val TAG           = "MapSaveManager"
     private const val SNAPSHOT_FILE = "cluster_snapshot.json"
@@ -46,6 +47,9 @@ object MapSaveManager {
     // ── Save ──────────────────────────────────────────────────────────────────
 
     fun save(context: Context): Boolean {
+        if (System.currentTimeMillis() - lastSaveMs < 5000) {
+            return true
+        }
         return try {
             val snapshot = ClusterSnapshot(
                 savedAtMs      = System.currentTimeMillis(),
@@ -60,6 +64,7 @@ object MapSaveManager {
             )
             val json = gson.toJson(snapshot)
             File(context.filesDir, SNAPSHOT_FILE).writeText(json)
+            lastSaveMs = System.currentTimeMillis() // remember just saved
             Log.i(TAG, "Snapshot saved (${json.length} bytes, " +
                 "${snapshot.devices.size} devices, ${snapshot.savedMessages.size} messages)")
             true

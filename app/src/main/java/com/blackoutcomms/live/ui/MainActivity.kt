@@ -41,6 +41,8 @@ import com.blackoutcomms.live.ui.messages.MessagesFragment
 import com.blackoutcomms.live.ui.help.HelpFragment
 import com.blackoutcomms.live.ui.traffic.TrafficFragment
 import com.blackoutcomms.live.ui.map.MapFragment
+import org.osmdroid.config.Configuration
+import java.io.File
 
 class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
@@ -69,10 +71,14 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         private val COLOR_BLE_DEFAULT    = Color.WHITE
         private const val PREFS_NAME         = "app_prefs"
         private const val PREF_SHOW_MESSAGES = "show_messages"
+
+        private const val PREF_AUTO_SAVE = "auto_save_snapshot"
     }
 
     // Persisted preference — read once on startup, kept in sync with the menu item
     private var showMessages: Boolean = true
+
+    private var autoSaveSnapshot = true
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -109,6 +115,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                 showDataActivityIcon()
             }
 
+            ClusterRepository.locationUpdates.observe(this@MainActivity) { _ ->
+                if (autoSaveSnapshot) {
+                    MapSaveManager.save(this@MainActivity)
+                }
+            }
             // Observe PIN verification state to save credentials or re-prompt
             connectionService?.pinState?.observe(this@MainActivity) { pinState ->
                 when (pinState) {
@@ -154,6 +165,19 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // OSMDroid config — MUST be before any MapView inflation
+        Configuration.getInstance().apply {
+            userAgentValue = "com.blackoutcomms.live"
+
+            val basePath = File(filesDir, "osmdroid").apply { mkdirs() }
+            osmdroidBasePath = basePath
+            osmdroidTileCache = File(basePath, "tiles").apply { mkdirs() }
+
+            tileDownloadMaxQueueSize = 8          // lower than 40 is better
+            expirationOverrideDuration = Long.MAX_VALUE  // never expire
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -163,6 +187,17 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         // Load persisted Show Messages preference
         showMessages = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(PREF_SHOW_MESSAGES, true)
+
+        // Load Auto Save preference (default true)
+        autoSaveSnapshot = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(PREF_AUTO_SAVE, true)
+
+        if (autoSaveSnapshot && MapSaveManager.hasSavedSnapshot(this)) {
+            val ok = MapSaveManager.restore(this)
+            if (ok) {
+                Toast.makeText(this, "Auto-loaded previous map snapshot", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         requestRequiredPermissions()
 
@@ -242,6 +277,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         menuInflater.inflate(R.menu.toolbar_menu, menu)
         connectMenuItem = menu.findItem(R.id.action_connect)
         menu.findItem(R.id.action_show_messages)?.isChecked = showMessages
+        menu.findItem(R.id.action_auto_save)?.isChecked = autoSaveSnapshot
         // Enable Reload Map only when a saved snapshot exists
         menu.findItem(R.id.action_reload_map)?.isEnabled = MapSaveManager.hasSavedSnapshot(this)
         val currentState = connectionService?.bleState?.value ?: BleFeedManager.BleState.IDLE
@@ -329,6 +365,13 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     .edit().putBoolean(PREF_SHOW_MESSAGES, showMessages).apply()
                 // Push to the active MapFragment's ViewModel if present
                 activeMapViewModel()?.setShowMessages(showMessages)
+                true
+            }
+            R.id.action_auto_save -> {
+                autoSaveSnapshot = !item.isChecked
+                item.isChecked = autoSaveSnapshot
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().putBoolean(PREF_AUTO_SAVE, autoSaveSnapshot).apply()
                 true
             }
             R.id.action_save_map -> {

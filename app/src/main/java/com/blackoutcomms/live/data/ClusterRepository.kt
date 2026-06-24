@@ -268,6 +268,10 @@ object ClusterRepository {
             }
         }
         _deviceStates.postValue(deviceMap.toMap())
+
+        _deviceStates.postValue(deviceMap.toMap())
+        _locationUpdates.postValue(payload.location.firstOrNull()?.ts)
+
         // Pulse the location update signal for the status line
         _locationUpdates.postValue(payload.location.firstOrNull()?.ts)
     }
