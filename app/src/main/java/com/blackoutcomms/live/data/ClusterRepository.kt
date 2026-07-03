@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.blackoutcomms.live.model.*
+import com.blackoutcomms.live.util.LocationUtils
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
@@ -83,6 +84,25 @@ object ClusterRepository {
 
     private val queuedLocationMap = mutableMapOf<String, LocationEntry>()
 
+    // Inside ClusterRepository object
+    private val directNeighborLastSeen = mutableMapOf<String, Long>()  // deviceId -> timestamp ms
+
+    private const val RF_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes
+
+    fun updateDirectNeighbor(deviceId: String) {
+        directNeighborLastSeen[deviceId] = System.currentTimeMillis()
+        //cleanupExpiredDirects()
+    }
+
+    private fun cleanupExpiredDirects() {
+        val now = System.currentTimeMillis()
+        directNeighborLastSeen.entries.removeIf { now - it.value > RF_TIMEOUT_MS }
+    }
+
+    // Expose for overlay / VM
+    val activeDirectNeighborIds: Set<String>
+        get() = directNeighborLastSeen.keys.toSet()
+
     // ── Ingestion ─────────────────────────────────────────────────────────────
 
     fun ingest(raw: String) {
@@ -118,6 +138,7 @@ object ClusterRepository {
     private fun processSelf(json: JsonObject) {
         val payload = gson.fromJson(json, SelfPayload::class.java)
         _selfDevice.postValue(payload.self)
+        cleanupExpiredDirects()
 
         // Also upsert self into deviceMap as a synthetic ClusterDevice
         val s = payload.self
@@ -214,6 +235,7 @@ object ClusterRepository {
                     relayState = entry.relayState ?: state.relayState
                 )
                 deviceMap[entry.id] = updated
+                updateDirectNeighbor(entry.id)
             }
         }
         nbrs.indirect.forEach { entry ->
@@ -238,16 +260,28 @@ object ClusterRepository {
         val nowMs = System.currentTimeMillis()
         val newPings = mutableListOf<PingEntry>()
         nbrs.direct.forEach { entry ->
-            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = true))
+            var dist : Float?
+            dist = 0.0f
+            deviceMap[entry.id]?.let {state ->
+                state.lat?.let { state2 ->
+                    dist = LocationUtils.distanceMeters(
+                        deviceMap[entry.id]?.lat, deviceMap[entry.id]?.lon,
+                        deviceMap[_selfDevice.value?.id]?.lat, deviceMap[_selfDevice.value?.id]?.lon).toFloat()
+                }
+            }
+            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = true, distance = dist))
         }
         nbrs.indirect.forEach { entry ->
-            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = false))
+            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = false, distance = 0.0f))
         }
         if (newPings.isNotEmpty()) {
             val current = _pingEntries.value?.toMutableList() ?: mutableListOf()
             current.addAll(0, newPings)   // newest first
             _pingEntries.postValue(current.take(MAX_PINGS))
         }
+
+        // clean up old pings
+        cleanupExpiredDirects()
     }
 
     private fun processLocation(json: JsonObject) {
@@ -274,6 +308,8 @@ object ClusterRepository {
 
         // Pulse the location update signal for the status line
         _locationUpdates.postValue(payload.location.firstOrNull()?.ts)
+
+        cleanupExpiredDirects()
     }
 
     private fun processGraph(json: JsonObject) {

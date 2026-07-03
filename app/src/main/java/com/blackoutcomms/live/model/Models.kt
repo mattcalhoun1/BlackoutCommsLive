@@ -192,5 +192,6 @@ data class PingEntry(
     val receivedMs: Long,
     val deviceId: String,
     val rssi: Int?,
-    val isDirect: Boolean
+    val isDirect: Boolean,
+    val distance: Float?
 )

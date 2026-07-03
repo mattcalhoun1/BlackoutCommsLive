@@ -36,6 +36,8 @@ class MapFragment : Fragment() {
     private var lastZoom = 0.0
     private var downloadWarningShown = false
 
+    private var rfEnvelopeOverlay: RfRangeEnvelopeOverlay? = null
+
     companion object {
         private const val PREFS_NAME = "map_prefs"
         private const val PREF_TILE_SOURCE = "tile_source"
@@ -67,10 +69,14 @@ class MapFragment : Fragment() {
         }
          */
 
+        rfEnvelopeOverlay = RfRangeEnvelopeOverlay(requireContext()) { viewModel.selfDevice.value?.id }
+
         setupMap()
         setupMessagePanel()
         setupFilterControls()
         setupObservers()
+
+        binding.mapView.overlays.add(0, rfEnvelopeOverlay)
     }
 
     // ── Map setup ─────────────────────────────────────────────────────────────
@@ -310,6 +316,8 @@ class MapFragment : Fragment() {
 
         viewModel.filteredDeviceStates.observe(viewLifecycleOwner) { states ->
             deviceOverlay?.deviceStates = states
+            rfEnvelopeOverlay?.let { binding.mapView.invalidate() }  // or post a specific update
+
             binding.mapView.invalidate()
 
             // Fallback: if self location hasn't arrived yet but other devices have

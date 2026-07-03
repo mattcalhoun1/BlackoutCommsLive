@@ -51,6 +51,8 @@ class PingAdapter(private val context: Context) :
         private val tvRssi:    TextView  = view.findViewById(R.id.tv_ping_rssi)
         private val tvType:    TextView  = view.findViewById(R.id.tv_ping_type)
 
+        private val tvDistance: TextView = view.findViewById(R.id.tv_ping_distance)
+
         fun bind(ping: PingEntry) {
             val state = deviceStates[ping.deviceId]
             val iconRes = IconResolver.deviceIcon(state?.device?.icon)
@@ -58,7 +60,18 @@ class PingAdapter(private val context: Context) :
             tvName.text = state?.device?.displayName ?: ping.deviceId
             tvTime.text = timeFmt.format(Date(ping.receivedMs))
             tvRssi.text = ping.rssi?.let { "$it dBm" } ?: "—"
-            tvType.text = if (ping.isDirect) "DIRECT" else "INDIRECT"
+            tvType.text = if (ping.isDirect) "  DIRECT" else "INDIRECT"
+
+            tvDistance.text = if (ping.distance != null && ping.distance > 0) {
+                if (ping.distance < 10000) {
+                    "${ping.distance.toInt()} m"
+                } else {
+                    String.format("%.1f km", ping.distance / 1000)
+                }
+            }
+            else {
+                "-"
+            }
         }
     }
 }

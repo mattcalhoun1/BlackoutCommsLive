@@ -30,6 +30,8 @@
     <color name="color_blue">#3A6A8A</color>
 
     <color name="surface_filter_btn">#CC0F140F</color>
+    <color name="rf_envelope_fill">#33FF4444</color>
+    <color name="rf_envelope_stroke">#80FF0000</color>
 
     <!-- Heading arrow color -->
     <color name="heading_arrow">#C8A84B</color>
