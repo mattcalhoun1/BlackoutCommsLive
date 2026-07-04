@@ -1,0 +1,13 @@
+{
+  "title": "Blackout Comms Help",
+  "sections": [
+    {"id": "overview", "title": "Overview", "file": "overview.md"},
+    {"id": "app-map-view", "title": "App: Map View", "file": "app-map-view.md"},
+    {"id": "app-traffic-view", "title": "App: Traffic View", "file": "app-traffic-view.md"},
+    {"id": "connection", "title": "App: Connecting", "file": "connection.md"},    {"id": "firmware-basics", "title": "Firmware Basics", "file": "firmware-basics.md"},
+    {"id": "mesh-memory", "title": "Mesh Memory", "file": "mesh-memory.md"},
+    {"id": "trust-and-security", "title": "Trust & Security", "file": "trust-and-security.md"},
+    {"id": "getting-started", "title": "Getting Started", "file": "getting-started.md"},
+    {"id": "onboarding", "title": "Onboarding Devices", "file": "onboarding.md"}
+  ]
+}
