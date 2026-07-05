@@ -18,11 +18,17 @@ object TileSources {
         ESRI_TOPO   ("ESRI World Topo",  "esri_topo"),
         OPEN_TOPO   ("OpenTopoMap",      "open_topo"),
         OSM         ("OpenStreetMap",    "osm"),
+        USGS_TOPO (label="USGS Topo", prefKey="usgs")
     }
 
-    val DEFAULT = Source.ESRI_TOPO
+    val DEFAULT = Source.ESRI_TOPO // Source.USGS_TOPO
 
     fun build(source: Source): org.osmdroid.tileprovider.tilesource.ITileSource = when (source) {
+        Source.USGS_TOPO -> object: XYTileSource (
+            "USGS Topo",0, 18, 256, ".png",
+            arrayOf("https://cache.chatters.io/tiles/usgs_topo/"),
+            "USGS Topo")
+        {}
 
         Source.ESRI_TOPO -> object : OnlineTileSourceBase(
             // Name is used as the OSMDroid cache folder — keep it stable
