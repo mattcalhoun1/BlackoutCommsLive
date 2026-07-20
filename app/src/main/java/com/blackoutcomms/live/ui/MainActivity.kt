@@ -43,6 +43,12 @@ import com.blackoutcomms.live.ui.traffic.TrafficFragment
 import com.blackoutcomms.live.ui.map.MapFragment
 import org.osmdroid.config.Configuration
 import java.io.File
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
+import com.blackoutcomms.live.model.ClusterConnection
+import com.blackoutcomms.live.util.IconResolver
 
 class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
@@ -64,6 +70,9 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     private var pendingBleName: String? = null
     private var pendingBlePin: String? = null
     private var connectMenuItem: MenuItem? = null
+
+    private lateinit var fragmentContainer: FrameLayout
+    private lateinit var mcOverlay: View   // for the MeshCore overlay
 
     companion object {
         private const val REQUEST_PERMISSIONS = 100
@@ -120,6 +129,17 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     MapSaveManager.save(this@MainActivity)
                 }
             }
+
+            ClusterRepository.currentNet.observe(this@MainActivity) { net ->
+                val isMeshCore = net == "M"
+
+                // Hide/show main content areas as needed
+                fragmentContainer.visibility = if (isMeshCore) View.GONE else View.VISIBLE
+
+                // Show overlay
+                mcOverlay.visibility = if (isMeshCore) View.VISIBLE else View.GONE
+            }
+
             // Observe PIN verification state to save credentials or re-prompt
             connectionService?.pinState?.observe(this@MainActivity) { pinState ->
                 when (pinState) {
@@ -183,6 +203,11 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayShowTitleEnabled(false)  // title shown via custom view
+
+        fragmentContainer = findViewById(R.id.fragment_container)
+        mcOverlay = findViewById(R.id.mc_overlay)
+
+        setupClusterStatusBar()
 
         // Load persisted Show Messages preference
         showMessages = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -259,6 +284,85 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
     }
 
     // ── Toolbar icon tinting ──────────────────────────────────────────────────
+    private fun setupClusterStatusBar() {
+        // Find your status bar views (add these IDs to your layout)
+        val frequencyTv = findViewById<TextView>(R.id.tv_frequency)
+        val iconSignal = findViewById<ImageView>(R.id.icon_signal)
+        val iconMc = findViewById<ImageView>(R.id.icon_mc)
+        val iconStealth = findViewById<ImageView>(R.id.icon_stealth)
+        val iconGps = findViewById<ImageView>(R.id.icon_gps)
+        val iconBattery = findViewById<ImageView>(R.id.icon_battery)
+        val statusBarContainer = findViewById<View>(R.id.status_bar_container)
+        val tvTemperature = findViewById<TextView>(R.id.tv_temperature)
+
+        ClusterRepository.selfDevice.observe(this@MainActivity) {
+            Log.w("ClusterRepo", "${ClusterRepository.selfDevice.value}")
+            if (ClusterRepository.selfDevice.value?.batteryLevel != null) {
+                updateBatteryIcon(iconBattery, ClusterRepository.selfDevice.value?.batteryLevel)
+            }
+
+            val temp = ClusterRepository.selfDevice.value?.temperature?.toDoubleOrNull()
+            if (temp != null && temp != 0.0) {
+                tvTemperature.text = String.format("%.1f° F", IconResolver.celsiusToFahrenheit(temp))
+                tvTemperature.visibility = View.VISIBLE
+            } else {
+                tvTemperature.visibility = View.GONE
+            }
+        }
+
+        ClusterRepository.clusterConnection.observe(this) { conn ->
+            if (conn != null) {
+                // Frequency
+                frequencyTv.text = "${conn.cfg ?: "[initializing]"}"
+
+                // Signal Quality Icon
+                iconSignal.setImageResource(when (conn.q) {
+                    5 -> R.drawable.antenna_green
+                    4 -> R.drawable.antenna_green
+                    3 -> R.drawable.antenna_blue
+                    2 -> R.drawable.antenna_yellow
+                    1 -> R.drawable.antenna_orange
+                    else -> R.drawable.antenna_red
+                })
+
+                iconMc.visibility = if (conn.net != "BC") View.VISIBLE else View.GONE
+
+                // Stealth Icon (updated with new levels)
+                iconStealth.setImageResource(when (conn.stealthLevel) {
+                    ClusterConnection.StealthLevel.HIGH -> R.drawable.stealth_high
+                    ClusterConnection.StealthLevel.MEDIUM -> R.drawable.stealth_med
+                    ClusterConnection.StealthLevel.LOW -> R.drawable.stealth_low
+                    else -> R.drawable.stealth_disabled
+                })
+
+                // GPS Icon with color
+                iconGps.setImageResource(when (conn.gpsStatus) {
+                    ClusterConnection.GpsStatus.GREEN -> R.drawable.gps_live
+                    ClusterConnection.GpsStatus.YELLOW -> R.drawable.gps_stale
+                    ClusterConnection.GpsStatus.GRAY -> R.drawable.gps_disabled
+                    else -> R.drawable.gps_disabled
+                })
+
+                // Make status bar visible if it was hidden
+                statusBarContainer.visibility = View.VISIBLE
+
+            } else {
+                frequencyTv.text = "No Device"
+                // Optional: hide icons or show disconnected state
+                statusBarContainer.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun updateBatteryIcon(iconBattery: ImageView, batteryStr: String?) {
+        val drawableRes = when {
+            batteryStr == "high" -> R.drawable.battery_high
+            batteryStr == "medium" -> R.drawable.battery_medium
+            batteryStr == "low" -> R.drawable.battery_low
+            else -> R.drawable.battery_unknown
+        }
+        iconBattery.setImageResource(drawableRes)
+    }
 
     override fun onResume() {
         super.onResume()

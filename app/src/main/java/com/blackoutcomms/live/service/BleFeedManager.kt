@@ -194,6 +194,18 @@ class BleFeedManager(context: Context) : BleManager(context) {
      * and dispatches complete lines to ClusterRepository.
      */
     private fun onDataReceived(data: Data) {
+        /*
+        new format for connectivity data:
+{
+  "conn": {
+    "net":"BC", [or BCM or M]
+    "cfg":"LoRa@913.3 S+",
+    "q":5, [0 - 5]
+    "stlth":"n", [char]
+    "la":0} [location age]
+}
+         */
+
         //Log.w("ble", "BLE data received ${data.size()} ${data.getStringValue(0)}")
         val chunk = data.getStringValue(0) ?: return
 

@@ -40,8 +40,11 @@
             android:id="@+id/tv_self_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/text_secondary"
+            android:textColor="@color/primary"
+            android:background="@color/secondary_background"
             android:textSize="11sp"
+            android:textAlignment="center"
+            android:layout_gravity="center_horizontal"
             android:fontFamily="monospace"
             android:visibility="gone" />
 

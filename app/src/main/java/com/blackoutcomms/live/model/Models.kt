@@ -68,6 +68,49 @@ data class NeighborEntry(
     val relayState: String?
 )
 
+/**
+ * Represents the current radio/connection state of the connected Blackout Comms device.
+ * Upserted from "conn" payloads sent over BLE. Only the most recent instance is kept.
+ */
+data class ClusterConnection(
+    val net: String,           // e.g. "BC"
+    val cfg: String,           // e.g. "LoRa@913.3 S+" — parse frequency from this
+    val q: Int,                // quality / signal / link metric?
+    val stlth: String,         // stealth mode "n" / "y" ?
+    val la: Int                // (location age)
+) {
+    /** Extract frequency in MHz from cfg string (e.g. "913.3" from "LoRa@913.3 S+") */
+    val frequencyMhz: String?
+        get() {
+            val match = Regex("""@(\d+\.?\d*)""").find(cfg)
+            return match?.groupValues?.get(1)
+        }
+
+    enum class StealthLevel { NONE, LOW, MEDIUM, HIGH }
+    val stealthLevel: StealthLevel
+        get() = when (stlth.lowercase()) {
+            "p" -> StealthLevel.LOW
+            "u" -> StealthLevel.MEDIUM
+            "s" -> StealthLevel.HIGH
+            else -> StealthLevel.NONE   // 'n' or unknown
+        }
+
+    val isStealthActive: Boolean get() = stealthLevel != StealthLevel.NONE
+    val qualityLevel: String get() = when (q) {
+        in 0..3 -> "poor"
+        in 4..6 -> "fair"
+        else -> "good"
+    }
+
+    enum class GpsStatus { GREEN, YELLOW, GRAY }
+    val gpsStatus: GpsStatus
+        get() = when {
+            la > 6000 -> GpsStatus.GRAY
+            la <= 120 -> GpsStatus.GREEN   // fresh fix (≤ 2 min)
+            else -> GpsStatus.YELLOW
+        }
+}
+
 // ── Location ─────────────────────────────────────────────────────────────────
 
 data class LocationPayload(

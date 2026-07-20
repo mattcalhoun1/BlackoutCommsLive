@@ -49,12 +49,15 @@
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:letterSpacing="0.05" />
-
             </LinearLayout>
 
         </androidx.appcompat.widget.Toolbar>
 
     </com.google.android.material.appbar.AppBarLayout>
+    <include
+        layout="@layout/status_bar_cluster"
+        android:layout_width="match_parent"
+        android:layout_height="28dp" />
 
     <!-- Fragment container takes all remaining space between toolbar and bottom nav -->
     <FrameLayout
@@ -62,6 +65,12 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
+
+    <include
+        layout="@layout/overlay_mc_mode"
+        android:id="@+id/mc_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_navigation"

@@ -16,6 +16,7 @@
     <color name="text_secondary">#6E7A63</color>
     <color name="text_data">#A8C48A</color>         <!-- monospace data value color -->
     <color name="divider">#1E2A1E</color>
+    <color name="secondary_background">#E6DACC</color>
 
     <color name="nav_background">#080C08</color>
     <!-- nav_icon_tint and nav_text_tint are defined as color state lists in res/color/ -->

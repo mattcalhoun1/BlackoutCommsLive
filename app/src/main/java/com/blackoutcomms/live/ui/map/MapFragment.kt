@@ -296,7 +296,7 @@ class MapFragment : Fragment() {
             // Show self device name on second line once known
             val selfDisplay = self.name.takeIf { it.isNotBlank() }
             if (selfDisplay != null) {
-                binding.tvSelfName.text = selfDisplay
+                binding.tvSelfName.text = " $selfDisplay "
                 binding.tvSelfName.visibility = View.VISIBLE
             } else {
                 binding.tvSelfName.visibility = View.GONE

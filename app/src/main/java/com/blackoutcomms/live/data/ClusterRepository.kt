@@ -70,6 +70,9 @@ object ClusterRepository {
     private val _locationUpdates = MutableLiveData<String?>()
     val locationUpdates: LiveData<String?> = _locationUpdates
 
+    private val _clusterConnection = MutableLiveData<ClusterConnection?>()
+    val clusterConnection: LiveData<ClusterConnection?> = _clusterConnection
+
     private val _trafficEntries = MutableLiveData<List<TrafficEntry>>(emptyList())
     val trafficEntries: LiveData<List<TrafficEntry>> = _trafficEntries
 
@@ -86,6 +89,9 @@ object ClusterRepository {
 
     // Inside ClusterRepository object
     private val directNeighborLastSeen = mutableMapOf<String, Long>()  // deviceId -> timestamp ms
+
+    private val _currentNet = MutableLiveData<String>("")
+    val currentNet: LiveData<String> = _currentNet
 
     private const val RF_TIMEOUT_MS = 10 * 60 * 1000L  // 10 minutes
 
@@ -123,6 +129,7 @@ object ClusterRepository {
                 json.has("message")   -> processMessage(json)
                 json.has("traffic")       -> processTraffic(json)
                 json.has("messageStatus") -> processMessageStatus(json)
+                json.has("conn")          -> processConn(json)
             }
             // Notify listener on successful ingestion (used for PIN verification)
             onDataIngested?.invoke()
@@ -428,6 +435,19 @@ object ClusterRepository {
             list.removeAll { it.receivedMs < cutoff }
         }
         _trafficEntries.postValue(updated)
+    }
+
+    private fun processConn(json: JsonObject) {
+        Log.w("ClusterRepo", "${json}")
+        try {
+            val connObj = json.getAsJsonObject("conn") ?: return
+            val connection = gson.fromJson(connObj, ClusterConnection::class.java)
+            _clusterConnection.postValue(connection)
+            _currentNet.postValue(connection.net)
+            Log.d("ClusterRepo", "Updated ClusterConnection: ${connection.cfg} @${connection.frequencyMhz}MHz q=${connection.q}")
+        } catch (e: Exception) {
+            Log.w("ClusterRepo", "Failed to parse conn payload", e)
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
