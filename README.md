@@ -430,6 +430,7 @@ More helpful information: **[chatters.io/support](https://www.chatters.io/suppor
 | Zero-Touch Trust explained | [chatters.io/zero-touch-trust](https://chatters.io/zero-touch-trust) |
 | Comparison page | [chatters.io/comparison](https://www.chatters.io/mesh-comparison-blackout-comms-vs-meshtastic-vs-meshcore) |
 | Firmware licensing | [chatters.io/license](https://chatters.io/licensing) |
+| BLE Interface Doc | [docs/BLE_Interface_Messages.md](docs/BLE_Interface_Messages.md) |
 
 ---
 
