@@ -1,6 +1,7 @@
 # Blackout Comms Live
 
 **The Command & Intelligence App for Blackout Comms Mesh Networks**
+<img width="800" height="300" alt="bc_live_app_x_article" src="https://github.com/user-attachments/assets/b6c36a3c-d6c7-4904-ac28-f06a0dcd6fd8" />
 
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=flat&logo=android&logoColor=white)](https://play.google.com/store/apps/details?id=com.blackoutcomms.live)
 [![Get it on Google Play](https://img.shields.io/badge/Google_Play-Free-3DDC84?style=flat&logo=google-play&logoColor=white)](https://play.google.com/store/apps/details?id=com.blackoutcomms.live)
