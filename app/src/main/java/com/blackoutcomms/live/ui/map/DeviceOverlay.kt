@@ -74,11 +74,16 @@ class DeviceOverlay(
         style = Paint.Style.STROKE
     }
 
-    private val distanceLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#E7F2FF")
-        strokeWidth = 3f
+    private val distanceHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(230, 0, 0, 0)
         style = Paint.Style.STROKE
-        pathEffect = DashPathEffect(floatArrayOf(14f, 10f), 0f)
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private val distanceLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFC107")
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
     }
 
     private val distanceLabelBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -242,6 +247,9 @@ class DeviceOverlay(
         val selfLat = selfState?.lat ?: selfPayload?.lat?.toDoubleOrNull() ?: return
         val selfLon = selfState?.lon ?: selfPayload?.lon?.toDoubleOrNull() ?: return
         val projection = mapView.projection
+        val density = context.resources.displayMetrics.density
+        distanceHaloPaint.strokeWidth = 9f * density
+        distanceLinePaint.strokeWidth = 5f * density
         val selfPt = projection.toPixels(GeoPoint(selfLat, selfLon), null)
 
         for ((id, state) in deviceStates) {
@@ -252,6 +260,11 @@ class DeviceOverlay(
             if (meters <= 0.0) continue
 
             val otherPt = projection.toPixels(GeoPoint(lat, lon), null)
+            canvas.drawLine(
+                selfPt.x.toFloat(), selfPt.y.toFloat(),
+                otherPt.x.toFloat(), otherPt.y.toFloat(),
+                distanceHaloPaint
+            )
             canvas.drawLine(
                 selfPt.x.toFloat(), selfPt.y.toFloat(),
                 otherPt.x.toFloat(), otherPt.y.toFloat(),
