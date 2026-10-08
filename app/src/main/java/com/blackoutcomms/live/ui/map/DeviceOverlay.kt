@@ -9,6 +9,8 @@ import com.blackoutcomms.live.model.DeviceState
 import com.blackoutcomms.live.model.GraphPayload
 import com.blackoutcomms.live.model.NeighborType
 import com.blackoutcomms.live.util.IconResolver
+import com.blackoutcomms.live.util.LocationUtils
+import com.blackoutcomms.live.util.UnitFormat
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Overlay
@@ -29,6 +31,9 @@ class DeviceOverlay(
     var deviceStates: Map<String, DeviceState> = emptyMap()
     var graphData: GraphPayload? = null
     var showMeshGraph: Boolean = false
+    var showDistances: Boolean = false
+    /** Metric on: km. Metric off: miles. */
+    var useMetric: Boolean = false
 
     private val iconCache = mutableMapOf<Int, Bitmap>()
     private val ICON_SIZE_DP  = 36f
@@ -69,6 +74,25 @@ class DeviceOverlay(
         style = Paint.Style.STROKE
     }
 
+    private val distanceLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E7F2FF")
+        strokeWidth = 3f
+        style = Paint.Style.STROKE
+        pathEffect = DashPathEffect(floatArrayOf(14f, 10f), 0f)
+    }
+
+    private val distanceLabelBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(220, 18, 24, 18)
+        style = Paint.Style.FILL
+    }
+
+    private val distanceLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#F4F7EE")
+        textSize = 30f
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+
     // Reusable path for the arrowhead
     private val arrowPath = Path()
 
@@ -83,6 +107,7 @@ class DeviceOverlay(
         val ringPx     = RING_RADIUS_DP * density
 
         if (showMeshGraph) drawMeshGraph(canvas, mapView)
+        if (showDistances) drawDistanceLines(canvas, mapView)
 
         for ((_, state) in deviceStates) {
             val lat = state.lat ?: continue
@@ -207,6 +232,54 @@ class DeviceOverlay(
                 )
             }
         }
+    }
+
+    // ── Distance lines from the connected device ──────────────────────────────
+
+    private fun drawDistanceLines(canvas: Canvas, mapView: MapView) {
+        val selfState = deviceStates[selfId]
+        val selfPayload = ClusterRepository.selfDevice.value
+        val selfLat = selfState?.lat ?: selfPayload?.lat?.toDoubleOrNull() ?: return
+        val selfLon = selfState?.lon ?: selfPayload?.lon?.toDoubleOrNull() ?: return
+        val projection = mapView.projection
+        val selfPt = projection.toPixels(GeoPoint(selfLat, selfLon), null)
+
+        for ((id, state) in deviceStates) {
+            if (id == selfId) continue
+            val lat = state.lat ?: continue
+            val lon = state.lon ?: continue
+            val meters = LocationUtils.distanceMeters(selfLat, selfLon, lat, lon)
+            if (meters <= 0.0) continue
+
+            val otherPt = projection.toPixels(GeoPoint(lat, lon), null)
+            canvas.drawLine(
+                selfPt.x.toFloat(), selfPt.y.toFloat(),
+                otherPt.x.toFloat(), otherPt.y.toFloat(),
+                distanceLinePaint
+            )
+            drawDistanceLabel(
+                canvas,
+                UnitFormat.formatDistance(meters, useMetric),
+                (selfPt.x + otherPt.x) / 2f,
+                (selfPt.y + otherPt.y) / 2f
+            )
+        }
+    }
+
+    private fun drawDistanceLabel(canvas: Canvas, text: String, x: Float, y: Float) {
+        if (text.isEmpty()) return
+        val padX = 12f
+        val padY = 7f
+        val width = distanceLabelPaint.measureText(text)
+        val fm = distanceLabelPaint.fontMetrics
+        val textH = fm.descent - fm.ascent
+        val left = x - width / 2f - padX
+        val top = y - textH / 2f - padY
+        val right = x + width / 2f + padX
+        val bottom = y + textH / 2f + padY
+        canvas.drawRoundRect(left, top, right, bottom, 8f, 8f, distanceLabelBg)
+        val baseline = y - (fm.ascent + fm.descent) / 2f
+        canvas.drawText(text, x, baseline, distanceLabelPaint)
     }
 
     // ── Touch ─────────────────────────────────────────────────────────────────

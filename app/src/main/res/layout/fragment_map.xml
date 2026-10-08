@@ -50,13 +50,13 @@
 
     </LinearLayout>
 
-    <!-- Top-right checkbox strip: Critical + Mesh Graph -->
+    <!-- Top-right checkbox strip: Critical, Mesh Graph, Distances -->
     <LinearLayout
         android:id="@+id/top_controls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:layout_margin="10dp">
 
         <CheckBox
@@ -73,13 +73,29 @@
             android:paddingTop="5dp"
             android:paddingBottom="5dp"
             android:checked="false"
-            android:layout_marginBottom="6dp" />
+            android:layout_marginEnd="6dp" />
 
         <CheckBox
             android:id="@+id/checkbox_mesh_graph"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Mesh Graph"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:buttonTint="@color/accent"
+            android:background="@drawable/bg_semi_dark"
+            android:paddingStart="6dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
+            android:checked="false"
+            android:layout_marginEnd="6dp" />
+
+        <CheckBox
+            android:id="@+id/checkbox_distances"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Distances"
             android:textColor="@color/text_primary"
             android:textSize="12sp"
             android:buttonTint="@color/accent"

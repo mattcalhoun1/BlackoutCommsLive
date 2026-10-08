@@ -7,7 +7,9 @@ import androidx.core.view.isVisible
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.databinding.BottomSheetDeviceDetailBinding
+import com.blackoutcomms.live.util.DisplayPrefs
 import com.blackoutcomms.live.util.IconResolver
+import com.blackoutcomms.live.util.UnitFormat
 import com.blackoutcomms.live.util.TimestampUtil
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
@@ -44,8 +46,10 @@ class DeviceDetailBottomSheet : BottomSheetDialogFragment() {
             tvHeading.text   = state.head?.let { "%.0f°".format(it) } ?: "—"
             tvTimestamp.text = TimestampUtil.formatTs(state.locationTs)
 
-            // Temperature — stored Celsius, shown as Fahrenheit
-            val tempStr = IconResolver.formatTempF(state.temperature)
+            // Temperature — stored Celsius; Metric selects °C, otherwise °F
+            val tempStr = state.temperature?.let {
+                UnitFormat.formatTemperature(it, DisplayPrefs.isMetric())
+            }
             tvTemperature.text      = tempStr ?: "—"
             //tvTemperature.isVisible = if (tempStr != null) View.VISIBLE else View.GONE
             tvTemperature.isVisible = if (tempStr != null) true else false

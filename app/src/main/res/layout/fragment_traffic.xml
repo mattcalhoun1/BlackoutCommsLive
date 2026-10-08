@@ -86,4 +86,17 @@
         android:clipToPadding="false"
         android:paddingBottom="8dp" />
 
+    <CheckBox
+        android:id="@+id/checkbox_show_indirect"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="8dp"
+        android:text="Show Indirect"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp"
+        android:buttonTint="@color/accent"
+        android:checked="false" />
+
 </LinearLayout>

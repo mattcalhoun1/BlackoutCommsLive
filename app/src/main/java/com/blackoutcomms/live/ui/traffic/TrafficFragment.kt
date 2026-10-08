@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.blackoutcomms.live.util.DisplayPrefs
 import com.blackoutcomms.live.R
 import com.blackoutcomms.live.databinding.FragmentTrafficBinding
 import com.blackoutcomms.live.model.TrafficEntry
@@ -28,6 +29,8 @@ class TrafficFragment : Fragment() {
     // invalidate() because its dimensions are still zero.
     private val viewModel: TrafficViewModel by activityViewModels()
     private lateinit var pingAdapter: PingAdapter
+    private var showIndirect = false
+    private var latestPings: List<com.blackoutcomms.live.model.PingEntry> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -205,12 +208,28 @@ class TrafficFragment : Fragment() {
         }
 
         viewModel.pingEntries.observe(viewLifecycleOwner) { pings ->
-            pingAdapter.submitList(pings.toList())
+            latestPings = pings
+            submitPings()
+        }
+
+        binding.checkboxShowIndirect.setOnCheckedChangeListener { _, checked ->
+            showIndirect = checked
+            submitPings()
+        }
+
+        DisplayPrefs.metric.observe(viewLifecycleOwner) { metric ->
+            pingAdapter.useMetric = metric
+            pingAdapter.notifyDataSetChanged()
         }
 
         viewModel.deviceStates.observe(viewLifecycleOwner) { states ->
             pingAdapter.updateDeviceStates(states)
         }
+    }
+
+    private fun submitPings() {
+        val visible = if (showIndirect) latestPings else latestPings.filter { it.isDirect }
+        pingAdapter.submitList(visible.toList())
     }
 
     override fun onDestroyView() {

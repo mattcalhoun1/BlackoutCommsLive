@@ -18,6 +18,7 @@ import org.osmdroid.events.ZoomEvent
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import java.io.File
+import com.blackoutcomms.live.util.DisplayPrefs
 import com.blackoutcomms.live.util.themedAlertBuilder
 
 class MapFragment : Fragment() {
@@ -214,6 +215,12 @@ class MapFragment : Fragment() {
             binding.mapView.invalidate()
         }
 
+        // Distances checkbox — lines from the connected device to every mapped device
+        binding.checkboxDistances.setOnCheckedChangeListener { _, checked ->
+            deviceOverlay?.showDistances = checked
+            binding.mapView.invalidate()
+        }
+
         // MGRS overlay checkbox — unchecked by default
         binding.checkboxMgrs.setOnCheckedChangeListener { _, checked ->
             if (checked) {
@@ -285,6 +292,13 @@ class MapFragment : Fragment() {
             showDeviceDetail(state)
         }
         binding.mapView.overlays.add(deviceOverlay)
+
+        deviceOverlay?.useMetric = DisplayPrefs.isMetric()
+        DisplayPrefs.metric.observe(viewLifecycleOwner) { metric ->
+            deviceOverlay?.useMetric = metric
+            binding.mapView.invalidate()
+        }
+
 
         viewModel.selfDevice.observe(viewLifecycleOwner) { self ->
             self ?: return@observe

@@ -48,7 +48,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import com.blackoutcomms.live.model.ClusterConnection
+import com.blackoutcomms.live.util.DisplayPrefs
 import com.blackoutcomms.live.util.IconResolver
+import com.blackoutcomms.live.util.UnitFormat
 
 class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
 
@@ -80,12 +82,14 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         private val COLOR_BLE_DEFAULT    = Color.WHITE
         private const val PREFS_NAME         = "app_prefs"
         private const val PREF_SHOW_MESSAGES = "show_messages"
+        private const val PREF_METRIC = DisplayPrefs.PREF_METRIC
 
         private const val PREF_AUTO_SAVE = "auto_save_snapshot"
     }
 
     // Persisted preference — read once on startup, kept in sync with the menu item
     private var showMessages: Boolean = true
+    private var useMetric: Boolean = false
 
     private var autoSaveSnapshot = true
 
@@ -213,6 +217,10 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         showMessages = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(PREF_SHOW_MESSAGES, true)
 
+        // Metric is off by default (miles / Fahrenheit). Selection is persisted.
+        DisplayPrefs.init(this)
+        useMetric = DisplayPrefs.isMetric()
+
         // Load Auto Save preference (default true)
         autoSaveSnapshot = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(PREF_AUTO_SAVE, true)
@@ -283,6 +291,16 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         }
     }
 
+    private fun renderSelfTemperature(tvTemperature: TextView) {
+        val temp = ClusterRepository.selfDevice.value?.temperature?.toDoubleOrNull()
+        if (temp != null && temp != 0.0) {
+            tvTemperature.text = UnitFormat.formatTemperature(temp, DisplayPrefs.isMetric())
+            tvTemperature.visibility = View.VISIBLE
+        } else {
+            tvTemperature.visibility = View.GONE
+        }
+    }
+
     // ── Toolbar icon tinting ──────────────────────────────────────────────────
     private fun setupClusterStatusBar() {
         // Find your status bar views (add these IDs to your layout)
@@ -295,19 +313,17 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         val statusBarContainer = findViewById<View>(R.id.status_bar_container)
         val tvTemperature = findViewById<TextView>(R.id.tv_temperature)
 
+        DisplayPrefs.metric.observe(this) {
+            renderSelfTemperature(tvTemperature)
+        }
+
         ClusterRepository.selfDevice.observe(this@MainActivity) {
             Log.w("ClusterRepo", "${ClusterRepository.selfDevice.value}")
             if (ClusterRepository.selfDevice.value?.batteryLevel != null) {
                 updateBatteryIcon(iconBattery, ClusterRepository.selfDevice.value?.batteryLevel)
             }
 
-            val temp = ClusterRepository.selfDevice.value?.temperature?.toDoubleOrNull()
-            if (temp != null && temp != 0.0) {
-                tvTemperature.text = String.format("%.1f° F", IconResolver.celsiusToFahrenheit(temp))
-                tvTemperature.visibility = View.VISIBLE
-            } else {
-                tvTemperature.visibility = View.GONE
-            }
+            renderSelfTemperature(tvTemperature)
         }
 
         ClusterRepository.clusterConnection.observe(this) { conn ->
@@ -381,6 +397,7 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
         menuInflater.inflate(R.menu.toolbar_menu, menu)
         connectMenuItem = menu.findItem(R.id.action_connect)
         menu.findItem(R.id.action_show_messages)?.isChecked = showMessages
+        menu.findItem(R.id.action_metric)?.isChecked = useMetric
         menu.findItem(R.id.action_auto_save)?.isChecked = autoSaveSnapshot
         // Enable Reload Map only when a saved snapshot exists
         menu.findItem(R.id.action_reload_map)?.isEnabled = MapSaveManager.hasSavedSnapshot(this)
@@ -469,6 +486,12 @@ class MainActivity : AppCompatActivity(), ConnectionDialog.Listener {
                     .edit().putBoolean(PREF_SHOW_MESSAGES, showMessages).apply()
                 // Push to the active MapFragment's ViewModel if present
                 activeMapViewModel()?.setShowMessages(showMessages)
+                true
+            }
+            R.id.action_metric -> {
+                useMetric = !item.isChecked
+                item.isChecked = useMetric
+                DisplayPrefs.setMetric(this, useMetric)
                 true
             }
             R.id.action_auto_save -> {

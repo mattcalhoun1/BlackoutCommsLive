@@ -12,6 +12,7 @@ import com.blackoutcomms.live.model.DeviceState
 import com.blackoutcomms.live.model.PingEntry
 import com.blackoutcomms.live.util.IconResolver
 import com.blackoutcomms.live.util.TimestampUtil
+import com.blackoutcomms.live.util.UnitFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -19,6 +20,7 @@ class PingAdapter(private val context: Context) :
     ListAdapter<PingEntry, PingAdapter.PingViewHolder>(DIFF) {
 
     private var deviceStates: Map<String, DeviceState> = emptyMap()
+    var useMetric: Boolean = false
     private val timeFmt = SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US)
 
     fun updateDeviceStates(states: Map<String, DeviceState>) {
@@ -63,13 +65,8 @@ class PingAdapter(private val context: Context) :
             tvType.text = if (ping.isDirect) "  DIRECT" else "INDIRECT"
 
             tvDistance.text = if (ping.distance != null && ping.distance > 0) {
-                if (ping.distance < 10000) {
-                    "${ping.distance.toInt()} m"
-                } else {
-                    String.format("%.1f km", ping.distance / 1000)
-                }
-            }
-            else {
+                UnitFormat.formatDistance(ping.distance.toDouble(), useMetric)
+            } else {
                 "-"
             }
         }
