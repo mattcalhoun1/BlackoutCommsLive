@@ -21,7 +21,9 @@ class PingAdapter(private val context: Context) :
 
     private var deviceStates: Map<String, DeviceState> = emptyMap()
     var useMetric: Boolean = false
-    private val timeFmt = SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US)
+    private val timeFmt = SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")  // device wall-clock, not phone TZ
+    }
 
     fun updateDeviceStates(states: Map<String, DeviceState>) {
         deviceStates = states

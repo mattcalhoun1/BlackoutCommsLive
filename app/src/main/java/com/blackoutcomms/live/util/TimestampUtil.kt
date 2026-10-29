@@ -10,6 +10,11 @@ import java.util.*
  *   - Full:    "yyyy-MM-dd HH:mm:ss"  e.g. "2026-05-11 13:55:55"
  *   - Compact: "yyMMddHHmmss"         e.g. "260513155919"  (2026-05-13 15:59:19)
  *
+ * Device timestamps are timezone-naive wall-clock strings. They are parsed
+ * and formatted in UTC so the digits are preserved regardless of the phone's
+ * time zone or DST. Age checks should compare these values against
+ * [DeviceClock.nowMs], not the phone clock.
+ *
  * Display format used everywhere in the UI: "MM/dd/yyyy HH:mm:ss"
  */
 object TimestampUtil {
@@ -17,6 +22,14 @@ object TimestampUtil {
     private val fmtFull    = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     private val fmtCompact = SimpleDateFormat("yyMMddHHmmss",        Locale.US)
     private val fmtDisplay = SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US)
+
+    init {
+        // Fixed zone so phone TZ/DST cannot shift device wall-clock digits.
+        val utc = TimeZone.getTimeZone("UTC")
+        fmtFull.timeZone = utc
+        fmtCompact.timeZone = utc
+        fmtDisplay.timeZone = utc
+    }
 
     /** Parse any supported feed timestamp string to epoch millis, or null on failure. */
     fun parseTs(ts: String?): Long? {
@@ -38,6 +51,9 @@ object TimestampUtil {
      * Parse any supported feed timestamp and re-format it as "MM/dd/yyyy HH:mm:ss".
      * Returns the original string unchanged if it cannot be parsed, so the UI
      * always has something to show rather than a blank.
+     *
+     * The result is the device's wall-clock time (UTC parse/format), not the
+     * phone's local time.
      */
     fun formatTs(ts: String?): String {
         if (ts.isNullOrBlank()) return "—"

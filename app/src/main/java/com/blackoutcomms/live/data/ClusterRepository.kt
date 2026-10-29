@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.blackoutcomms.live.model.*
+import com.blackoutcomms.live.util.DeviceClock
+import com.blackoutcomms.live.util.TimestampUtil
 import com.blackoutcomms.live.util.LocationUtils
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -144,6 +146,7 @@ object ClusterRepository {
 
     private fun processSelf(json: JsonObject) {
         val payload = gson.fromJson(json, SelfPayload::class.java)
+        DeviceClock.observe(payload.self.ts)
         _selfDevice.postValue(payload.self)
         cleanupExpiredDirects()
 
@@ -263,10 +266,11 @@ object ClusterRepository {
         _neighbors.postValue(nbrs)
         _deviceStates.postValue(deviceMap.toMap())
 
-        // Emit a PingEntry for every direct and indirect neighbor sighting
-        val nowMs = System.currentTimeMillis()
+        // Emit a PingEntry for every direct and indirect neighbor sighting.
+        // Prefer the neighbor's own ts (device clock); fall back to estimated device now.
         val newPings = mutableListOf<PingEntry>()
         nbrs.direct.forEach { entry ->
+            DeviceClock.observe(entry.ts)
             var dist : Float?
             dist = 0.0f
             deviceMap[entry.id]?.let {state ->
@@ -276,10 +280,13 @@ object ClusterRepository {
                         deviceMap[_selfDevice.value?.id]?.lat, deviceMap[_selfDevice.value?.id]?.lon).toFloat()
                 }
             }
-            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = true, distance = dist))
+            val tsMs = TimestampUtil.parseTs(entry.ts) ?: DeviceClock.nowMs()
+            newPings.add(PingEntry(receivedMs = tsMs, deviceId = entry.id, rssi = entry.rssi, isDirect = true, distance = dist))
         }
         nbrs.indirect.forEach { entry ->
-            newPings.add(PingEntry(receivedMs = nowMs, deviceId = entry.id, rssi = entry.rssi, isDirect = false, distance = 0.0f))
+            DeviceClock.observe(entry.ts)
+            val tsMs = TimestampUtil.parseTs(entry.ts) ?: DeviceClock.nowMs()
+            newPings.add(PingEntry(receivedMs = tsMs, deviceId = entry.id, rssi = entry.rssi, isDirect = false, distance = 0.0f))
         }
         if (newPings.isNotEmpty()) {
             val current = _pingEntries.value?.toMutableList() ?: mutableListOf()
@@ -294,6 +301,7 @@ object ClusterRepository {
     private fun processLocation(json: JsonObject) {
         val payload = gson.fromJson(json, LocationPayload::class.java)
         payload.location.forEach { loc ->
+            DeviceClock.observe(loc.ts)
             val existing = deviceMap[loc.id]
             if (existing != null) {
                 deviceMap[loc.id] = existing.copy(
@@ -473,6 +481,7 @@ object ClusterRepository {
     }
 
     fun reset() {
+        DeviceClock.reset()
         deviceMap.clear()
         graphMap.clear()
         _selfDevice.postValue(null)
@@ -493,6 +502,12 @@ object ClusterRepository {
      * Called by MapSaveManager.restore(); replaces current state entirely.
      */
     fun restoreFromSnapshot(snapshot: MapSaveManager.ClusterSnapshot) {
+        // Re-seed the device clock from saved timestamps so age filters
+        // still follow the mesh clock after a reload.
+        DeviceClock.reset()
+        DeviceClock.observe(snapshot.self?.ts)
+        snapshot.devices.values.forEach { DeviceClock.observe(it.locationTs) }
+
         // Rebuild internal maps
         deviceMap.clear()
         deviceMap.putAll(snapshot.devices)

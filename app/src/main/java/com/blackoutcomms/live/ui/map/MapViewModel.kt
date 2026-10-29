@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.blackoutcomms.live.data.ClusterRepository
 import com.blackoutcomms.live.model.DeviceState
+import com.blackoutcomms.live.util.DeviceClock
 import com.blackoutcomms.live.util.TimestampUtil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -61,7 +62,8 @@ class MapViewModel : ViewModel() {
             val maxAge   = _selectedMaxAge.value ?: MaxAge.ALL_TIME
             val hidden   = _hiddenDeviceIds.value ?: emptySet()
             val critOnly = _criticalOnly.value ?: false
-            val nowMs    = System.currentTimeMillis()
+            // Device clock, not phone clock — mesh TZ/DST may differ.
+            val nowMs    = DeviceClock.nowMs()
 
             med.value = all.filter { (id, state) ->
                 // 1. Device-picker filter

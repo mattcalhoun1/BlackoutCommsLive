@@ -330,9 +330,7 @@ class MapFragment : Fragment() {
 
         viewModel.filteredDeviceStates.observe(viewLifecycleOwner) { states ->
             deviceOverlay?.deviceStates = states
-            rfEnvelopeOverlay?.let { binding.mapView.invalidate() }  // or post a specific update
-
-            binding.mapView.invalidate()
+            forceMapRedraw()
 
             // Fallback: if self location hasn't arrived yet but other devices have
             // known positions, centre on the first one we find. Once mapInitialised
@@ -348,7 +346,7 @@ class MapFragment : Fragment() {
 
         viewModel.graphData.observe(viewLifecycleOwner) { graph ->
             deviceOverlay?.graphData = graph
-            binding.mapView.invalidate()
+            forceMapRedraw()
         }
 
         viewModel.selectedMaxAge.observe(viewLifecycleOwner) { age ->
@@ -430,6 +428,24 @@ class MapFragment : Fragment() {
     }
 
     private var previousMessageCount = 0
+
+
+    /**
+     * OSMDroid often ignores a plain invalidate() while the map is idle, so
+     * custom overlays (device markers, mesh lines) only appear to update after
+     * the user pans or zooms. Posting the invalidate (and a short follow-up)
+     * forces the draw cycle so moved devices appear without interaction.
+     */
+    private fun forceMapRedraw() {
+        binding.mapView.postInvalidate()
+        binding.mapView.post {
+            binding.mapView.invalidate()
+            // No-op center set forces OSMDroid's draw cycle the same way a
+            // user pan does, which plain invalidate() often skips while idle.
+            val center = binding.mapView.mapCenter
+            binding.mapView.controller.setCenter(center)
+        }
+    }
 
     private fun showDeviceDetail(state: DeviceState) {
         DeviceDetailBottomSheet.newInstance(state.device.id)
