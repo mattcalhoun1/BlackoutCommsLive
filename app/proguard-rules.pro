@@ -18,3 +18,7 @@
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
+
+# Keep ClusterSnapshot so Gson can deserialize saved map state after obfuscation
+-keep class com.blackoutcomms.live.data.MapSaveManager$ClusterSnapshot { *; }
+-keepclassmembers class com.blackoutcomms.live.data.MapSaveManager$ClusterSnapshot { *; }
